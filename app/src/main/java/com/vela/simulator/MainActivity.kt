@@ -237,6 +237,8 @@ fun VelaApp(vm: MainViewModel) {
                     .fillMaxSize()
                     .then(if (floatingBar && glassBar) Modifier.layerBackdrop(backdrop) else Modifier),
                 beyondViewportPageCount = 1,
+                // 推入页打开时禁用横向翻页：阻断下层页面滑动手势（配合 OverlayHost）
+                userScrollEnabled = !overlayOpen,
                 pageContent = { page ->
                     when (VelaTab.entries[page]) {
                         VelaTab.Home -> HomeScreen(
@@ -293,7 +295,10 @@ fun VelaApp(vm: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 val id = runId ?: return@AnimatedVisibility
-                OverlayHost(transform = predictiveTransform) {
+                // RunScreen 内嵌 VNC AndroidView：不能在其祖先上消费触摸（会导致
+                // pointerInteropFilter 收到已消费事件而取消 View 触摸流），
+                // 仅提供不透明背景；翻页穿透已由 userScrollEnabled=false 阻断
+                OverlayHost(transform = predictiveTransform, absorbTouches = false) {
                     RunScreen(vm, id, onBack = { runId = null })
                 }
             }
@@ -370,27 +375,31 @@ fun VelaApp(vm: MainViewModel) {
 /**
  * 推入页宿主（v0.2.4 触摸穿透修复）：
  * - 不透明背景：推入页不再透出底下的 Pager 页面；
- * - 触摸吸收层：空白区域的指针事件在本层被消费，不再落到底下的
- *   HorizontalPager/模板卡片上。事件分发 Main pass 自深向浅，
- *   页内按钮/滚动/AndroidView 先于本层拿到事件，交互不受影响。
+ * - 触摸吸收层（absorbTouches）：空白区域的指针事件在本层被消费，不再落到
+ *   底下的 HorizontalPager/模板卡片上。事件分发 Main pass 自深向浅，
+ *   页内按钮/滚动先于本层拿到事件，交互不受影响。
+ *   注意：内容包含 AndroidView 的页面（RunScreen 的 VNC）必须传 false，
+ *   否则 View 会在 Final pass 收到已消费事件而被取消触摸。
  */
 @Composable
-private fun OverlayHost(transform: Modifier, content: @Composable () -> Unit) {
+private fun OverlayHost(transform: Modifier, absorbTouches: Boolean = true, content: @Composable () -> Unit) {
     val bg = MiuixTheme.colorScheme.background
     Box(
         Modifier
             .fillMaxSize()
             .then(transform)
             .background(bg)
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Main)
-                        event.changes.forEach { it.consume() }
-                        if (event.changes.all { !it.pressed }) break
+            .then(
+                if (absorbTouches) Modifier.pointerInput(Unit) {
+                    awaitEachGesture {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            event.changes.forEach { it.consume() }
+                            if (event.changes.all { !it.pressed }) break
+                        }
                     }
-                }
-            },
+                } else Modifier
+            ),
     ) { content() }
 }
 
