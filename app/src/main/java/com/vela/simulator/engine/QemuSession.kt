@@ -2,6 +2,7 @@ package com.vela.simulator.engine
 
 import com.vela.simulator.device.DeviceTemplate
 import com.vela.simulator.terminal.SerialConsole
+import com.vela.simulator.util.FileLogger
 import com.vela.simulator.vnc.RfbClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ class QemuSession(
     /** 追加一条完整日志行 */
     fun appendLog(line: String) {
         logLines.value = (logLines.value + line).takeLast(800)
+        FileLogger.sessionLine(line)
     }
 
     /** 串口原始文本：处理不完整行，合并后再展示 */
@@ -59,6 +61,14 @@ class QemuSession(
         val complete = parts.dropLast(1).filter { it.isNotEmpty() }
         if (complete.isEmpty()) return
         logLines.value = (logLines.value + complete).takeLast(800)
+        complete.forEach { FileLogger.sessionLine(it) }
+    }
+
+    /** 标记会话失败（不抛出，保证调用方不崩溃） */
+    fun failWith(message: String, tr: Throwable? = null) {
+        _state.value = State.FAILED
+        appendLog("[vela] 启动失败: $message")
+        FileLogger.e("session", "会话启动失败: $message", tr)
     }
 
     suspend fun start() {
@@ -66,11 +76,17 @@ class QemuSession(
         _state.value = State.BOOTING
         _exitCode.value = null
         logLines.value = listOf("[vela] 启动 ${template.name}")
-        val plan = withContext(Dispatchers.IO) {
-            QemuArgsBuilder.build(template, imagesDir, runtime.prefixUsr)
+        FileLogger.beginSessionLog(template.name)
+        FileLogger.i("session", "开始启动会话 template=${template.id} machine=${template.qemu.machine}")
+        val plan: QemuArgsBuilder.Plan? = withContext(Dispatchers.IO) {
+            runCatching { QemuArgsBuilder.build(template, imagesDir, runtime.prefixUsr) }
+                .onFailure { failWith(it.message ?: "构建 QEMU 参数失败", it) }
+                .getOrNull()
         }
+        if (plan == null) return
         _ports.value = Ports(plan.serialPort, plan.vncPort)
         appendLog("[qemu-cmd] ${plan.command.joinToString(" ")}")
+        FileLogger.i("session", "qemu-cmd: ${plan.command.joinToString(" ")}")
 
         val pb = ProcessBuilder(plan.command)
         pb.redirectErrorStream(true)
@@ -85,6 +101,7 @@ class QemuSession(
         } catch (e: Exception) {
             _state.value = State.FAILED
             appendLog("[vela] 启动失败: ${e.message}")
+            FileLogger.e("session", "QEMU 进程启动失败", e)
             if (e.message?.contains("exec", true) == true) {
                 appendLog("[vela] 提示: 若 Android>=10 报 exec 权限错误，请确认 targetSdk=28 且运行时已安装")
             }
@@ -134,6 +151,7 @@ class QemuSession(
             _exitCode.value = code
             _state.value = if (_state.value != State.IDLE) State.EXITED else State.IDLE
             appendLog("[vela] QEMU 已退出（代码 $code）")
+            FileLogger.i("session", "QEMU 退出 code=$code")
             console.close()
         }
 
@@ -141,6 +159,7 @@ class QemuSession(
     }
 
     fun stop() {
+        FileLogger.i("session", "停止会话")
         _state.value = State.IDLE
         runCatching { process?.destroy() }
         process = null
@@ -154,5 +173,6 @@ class QemuSession(
     fun release() {
         stop()
         logPump?.cancel()
+        FileLogger.endSessionLog()
     }
 }

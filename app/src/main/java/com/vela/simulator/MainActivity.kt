@@ -38,17 +38,23 @@ import com.vela.simulator.ui.theme.VelaTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.vela.simulator.util.FileLogger.i("app", "MainActivity.onCreate")
         enableEdgeToEdge()
         setContent {
             VelaTheme {
-                VelaApp()
+                // 注意：必须显式获取并传递 ViewModel。
+                // 不能写成 `VelaApp(vm = viewModel())` 默认参数形式 ——
+                // Compose 编译器 1.5.14 下省略实参调用会导致整个函数体被
+                // 静默跳过（组合树为空、界面黑屏、无任何崩溃日志）。
+                val vm: MainViewModel = viewModel()
+                VelaApp(vm)
             }
         }
     }
 }
 
 @Composable
-fun VelaApp(vm: MainViewModel = viewModel()) {
+fun VelaApp(vm: MainViewModel) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route ?: "home"

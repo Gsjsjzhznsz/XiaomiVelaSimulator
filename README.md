@@ -17,6 +17,7 @@
 - **📟 双视图仿真输出**
   - **串口控制台**：实时查看 NuttShell (nsh) 启动日志，支持直接输入命令（`help`、`ps`、`free`、`uname`…）
   - **VNC 画面**：内置极简 RFB 客户端（Raw 编码），呈现帧缓冲画面；圆表自动圆形裁剪
+- **🛠 黑屏修复 + 文件日志（v0.2.1）**：修复启动黑屏（组合被静默跳过）；新增 `vela.log` 文件日志、QEMU 会话日志落盘、崩溃 tombstone 与"分享日志"入口
 - **👆 触摸输入（v0.2.0 新增）**
   - 画面视图支持直接触摸/拖动：手势坐标按 letterbox 映射回帧缓冲，经 RFB PointerEvent 上行
   - `virt` 机器自动挂载 `virtio-tablet-pci` 绝对指针设备（模板参数 `touchInput` 可关）
@@ -42,8 +43,8 @@
 
 ## 📦 下载 APK
 
-最新版本：[**Releases**](https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases) · v0.2.0 直链：
-`XiaomiVelaSimulator-v0.2.0-debug.apk`（约 20MB，minSdk 26，Android 8.0+）
+最新版本：[**Releases**](https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases) · v0.2.1 直链：
+`XiaomiVelaSimulator-v0.2.1-debug.apk`（约 21MB，minSdk 26，Android 8.0+，修复 v0.2.0 启动黑屏）
 
 ## 📦 三个官方系预编译镜像（见 [Releases](https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/tag/v0.1.0)）
 
@@ -107,6 +108,23 @@ Android 10+ 的 W^X 限制禁止 `targetSdk >= 29` 的应用执行应用数据�
 ### 手环模板（MPS2）为什么画面标签是空的？
 
 MPS2 仿真的是无显示控制器的 MCU 板卡，NuttX 输出走串口控制台。画面视图用于带显示设备的镜像（可在自定义模板的附加参数中尝试 `-device virtio-gpu-device` 等）。
+
+### 打开应用黑屏怎么办？
+
+v0.2.0 存在一个 Compose 组合缺陷：`VelaApp(vm = viewModel())` 默认参数写法在特定调用路径下会导致整个界面组合被静默跳过（不崩溃、无异常），表现为打开即黑屏。**v0.2.1 已修复并加入 Robolectric 启动回归测试**。若你仍遇到黑屏，请到 **设置 → 诊断日志 → 分享日志** 导出 `vela.log` 反馈。
+
+### 日志文件在哪里？
+
+应用运行日志、QEMU 会话输出、崩溃记录（tombstone）均写入应用专属外部目录（无需存储权限）：
+
+```
+Android/data/com.vela.simulator/files/logs/
+├── vela.log          # 主日志（超 2MB 自动滚动为 vela.log.old）
+├── session-*.log     # 每次 QEMU 会话的完整输出
+└── crash-*.txt       # 未捕获异常堆栈
+```
+
+首页会显示"上次异常退出"提示条；可在设置页分享或清空日志。
 
 ### 模板参数是官方准确的吗？
 

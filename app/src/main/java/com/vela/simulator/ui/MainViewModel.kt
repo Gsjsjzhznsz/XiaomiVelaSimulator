@@ -9,6 +9,7 @@ import com.vela.simulator.device.TemplateRepository
 import com.vela.simulator.engine.ImageManager
 import com.vela.simulator.engine.QemuRuntime
 import com.vela.simulator.engine.QemuSession
+import com.vela.simulator.util.FileLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +30,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _templateList = MutableStateFlow<List<Pair<DeviceTemplate, TemplateRepository.TemplateMeta>>>(emptyList())
     val templateList: StateFlow<List<Pair<DeviceTemplate, TemplateRepository.TemplateMeta>>> = _templateList
     fun refreshTemplates() {
-        _templateList.value = templates.loadAll()
+        runCatching { templates.loadAll() }
+            .onSuccess {
+                _templateList.value = it
+                FileLogger.i("templates", "模板加载完成: ${it.size} 个")
+            }
+            .onFailure { e ->
+                FileLogger.e("templates", "模板加载失败", e)
+            }
     }
 
     fun templateById(id: String): DeviceTemplate? =
@@ -62,11 +70,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     fileProgress = if (total > 0) "$name  ${(downloaded / 1024 / 1024)}MB / ${total / 1024 / 1024}MB" else "$name  ${downloaded / 1024}KB"
                 )
             }
-            override fun onLog(line: String) { /* 运行时安装日志可并入阶段 */ }
+            override fun onLog(line: String) { FileLogger.i("runtime", line) }
         }
         installJob = viewModelScope.launch(Dispatchers.IO) {
+            FileLogger.i("runtime", "开始安装 QEMU 运行时 (mirror=$mirror)")
             runCatching { runtime.install(mirror) }
                 .onSuccess {
+                    FileLogger.i("runtime", "QEMU 运行时安装成功")
                     _runtimeState.value = RuntimeUiState(
                         installed = true, busy = false,
                         stage = "QEMU 运行时就绪",
@@ -74,6 +84,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 .onFailure { e ->
+                    FileLogger.e("runtime", "QEMU 运行时安装失败", e)
                     _runtimeState.value = _runtimeState.value.copy(
                         busy = false, error = e.message ?: "安装失败"
                     )
@@ -120,8 +131,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         downloadJob = viewModelScope.launch(Dispatchers.IO) {
             runCatching { images.download(entry) }
-                .onSuccess { _imageState.value = ImageUiState(stage = "镜像就绪") }
-                .onFailure { _imageState.value = ImageUiState(error = it.message ?: "下载失败") }
+                .onSuccess {
+                    FileLogger.i("image", "镜像下载完成: ${entry.id}")
+                    _imageState.value = ImageUiState(stage = "镜像就绪")
+                }
+                .onFailure {
+                    FileLogger.e("image", "镜像下载失败: ${entry.id}", it)
+                    _imageState.value = ImageUiState(error = it.message ?: "下载失败")
+                }
         }
     }
 
@@ -145,7 +162,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         s.console.onText = { text -> s.appendLogRaw(text) }
         session = s
         _sessionState.value = s
-        viewModelScope.launch(Dispatchers.IO) { s.start() }
+        viewModelScope.launch(Dispatchers.IO) {
+            // 任何启动异常都必须留在会话内，绝不能带崩整个应用
+            runCatching { s.start() }
+                .onFailure {
+                    FileLogger.e("session", "会话启动异常", it)
+                    s.failWith(it.message ?: "未知错误", it)
+                }
+        }
     }
 
     fun stopSession() {

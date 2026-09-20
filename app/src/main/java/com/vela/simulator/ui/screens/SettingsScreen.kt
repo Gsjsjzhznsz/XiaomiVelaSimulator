@@ -19,16 +19,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.FileProvider
 import com.vela.simulator.engine.QemuRuntime
 import com.vela.simulator.ui.MainViewModel
 import com.vela.simulator.ui.theme.VelaSurface
+import com.vela.simulator.util.FileLogger
+import java.io.File
 
 /** 设置：QEMU 运行时管理、镜像下载源、关于 */
 @Composable
@@ -103,12 +110,67 @@ fun SettingsScreen(vm: MainViewModel) {
 
         Spacer(Modifier.height(12.dp))
 
-        // 关于
+        // 诊断日志
+        Card(colors = CardDefaults.cardColors(containerColor = VelaSurface), shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Text("诊断日志", style = MaterialTheme.typography.titleMedium)
+                val ctx = LocalContext.current
+                var logPath by remember { mutableStateOf("") }
+                LaunchedEffect(Unit) {
+                    logPath = FileLogger.logFile?.absolutePath ?: "日志目录不可用"
+                }
+                Text(
+                    "应用运行 / QEMU 会话 / 崩溃记录都会写入本地文件，遇到问题可通过“分享日志”导出发给开发者。",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Text(
+                    logPath,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        val f = FileLogger.logFile
+                        if (f == null || !f.exists()) {
+                            Toast.makeText(ctx, "日志文件尚未生成", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        runCatching {
+                            val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            ctx.startActivity(Intent.createChooser(send, "分享诊断日志"))
+                        }.onFailure {
+                            Toast.makeText(ctx, "分享失败: ${it.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }) { Text("分享日志") }
+                    OutlinedButton(onClick = {
+                        FileLogger.clear()
+                        Toast.makeText(ctx, "日志已清空", Toast.LENGTH_SHORT).show()
+                    }) { Text("清空日志") }
+                }
+                val crash = FileLogger.lastCrashSummary()
+                if (crash != null) {
+                    Text(
+                        "最近崩溃: ${crash.first} · ${crash.second}",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
         Card(colors = CardDefaults.cardColors(containerColor = VelaSurface), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp)) {
                 Text("关于", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Xiaomi VELA Simulator v0.1.0\n" +
+                    "Xiaomi VELA Simulator v0.2.1\n" +
                         "基于 openvela（小米 VELA 开源版，Apache-2.0）与 QEMU。\n" +
                         "本应用为社区学习工具，与 Xiaomi 无隶属或背书关系；" +
                         "设备模板参数为公开资料整理的可编辑预设。",

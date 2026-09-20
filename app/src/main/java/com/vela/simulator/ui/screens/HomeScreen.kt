@@ -26,8 +26,12 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,9 +43,11 @@ import com.vela.simulator.ui.MainViewModel
 import com.vela.simulator.ui.components.WatchPreview
 import com.vela.simulator.ui.theme.VelaGreen
 import com.vela.simulator.ui.theme.VelaOrange
+import com.vela.simulator.ui.theme.VelaRed
 import com.vela.simulator.ui.theme.VelaSurface
 import com.vela.simulator.ui.theme.VelaSurfaceHigh
 import com.vela.simulator.ui.theme.VelaTextDim
+import com.vela.simulator.util.FileLogger
 
 /** 首页：QEMU 运行时状态 + 设备模板网格 */
 @Composable
@@ -49,13 +55,56 @@ fun HomeScreen(vm: MainViewModel, onOpenTemplate: (String) -> Unit) {
     val templates by vm.templateList.collectAsState()
     val runtime by vm.runtimeState.collectAsState()
 
+    // 上次异常退出提示（崩溃 tombstone）
+    var lastCrash by remember { mutableStateOf<Pair<String, String>?>(null) }
+    LaunchedEffect(Unit) { lastCrash = FileLogger.lastCrashSummary() }
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("Xiaomi VELA 模拟器", style = MaterialTheme.typography.headlineMedium)
         Text(
             "基于 openvela 官方源码与 QEMU 的可穿戴设备系统仿真",
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
         )
+
+        lastCrash?.let { (fname, cause) ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF3A1A1A)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("⚠ 上次异常退出", color = VelaRed, style = MaterialTheme.typography.titleSmall)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "忽略",
+                            color = VelaTextDim,
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    FileLogger.lastCrashFile()?.let { FileLogger.dismissCrash(it) }
+                                    lastCrash = null
+                                }
+                                .padding(4.dp),
+                        )
+                    }
+                    Text(
+                        cause,
+                        color = VelaTextDim,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    Text(
+                        "详情见设置→诊断日志（$fname）",
+                        color = VelaTextDim,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+        }
 
         // 运行时状态卡片
         Card(
