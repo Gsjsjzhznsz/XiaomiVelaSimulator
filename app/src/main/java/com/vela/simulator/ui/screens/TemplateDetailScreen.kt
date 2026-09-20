@@ -75,7 +75,12 @@ fun TemplateDetailScreen(
     val manifest by remember { mutableStateOf(vm.images.loadManifest()) }
     val entry: ImageManager.ImageEntry? = manifest.images.firstOrNull { it.id == t.suggestedImageId }
     val imageState by vm.imageState.collectAsState()
-    val kernelReady = remember(imageState) { vm.images.isKernelReady(t.qemu.kernel) }
+    // v0.2.5 修复“刚点下载就显示已就绪 + 进度条仍在”：
+    // ① 下载状态按清单条目 id 作用域隔离，不再跨模板串扰；
+    // ② kernel 文件先落盘但 entry 其余文件仍在下载时，不提前宣布“已就绪”
+    val busyHere = imageState.busy && imageState.imageId == (entry?.id ?: "")
+    val imageError = imageState.error?.takeIf { imageState.imageId == (entry?.id ?: "") }
+    val kernelReady = remember(imageState, busyHere) { !busyHere && vm.images.isKernelReady(t.qemu.kernel) }
 
     // 自定义导入
     var importTarget by remember { mutableStateOf<String?>(null) }
@@ -126,20 +131,23 @@ fun TemplateDetailScreen(
                         Column(Modifier.weight(1f).padding(start = 10.dp)) {
                             Text(entry?.name ?: t.qemu.kernel, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                if (kernelReady) "镜像已就绪 · ${t.qemu.kernel}"
-                                else (entry?.desc ?: "未找到清单条目，可导入本地镜像"),
+                                when {
+                                    busyHere -> "正在下载镜像…"
+                                    kernelReady -> "镜像已就绪 · ${t.qemu.kernel}"
+                                    else -> (entry?.desc ?: "未找到清单条目，可导入本地镜像")
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
                     }
-                    if (imageState.busy) {
+                    if (busyHere) {
                         LinearProgressIndicator(
                             Modifier.fillMaxWidth().padding(top = 10.dp),
                             color = VelaOrange, trackColor = VelaSurfaceHigh,
                         )
-                        Text(imageState.fileProgress, style = MaterialTheme.typography.bodySmall)
+                        Text(imageState.fileProgress.ifBlank { imageState.stage }, style = MaterialTheme.typography.bodySmall)
                     }
-                    imageState.error?.let {
+                    imageError?.let {
                         Text("错误: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }
                     Row(
@@ -147,8 +155,8 @@ fun TemplateDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         if (!kernelReady && entry != null) {
-                            Button(onClick = { vm.downloadImage(entry) }, enabled = !imageState.busy) {
-                                Text("自动下载")
+                            Button(onClick = { vm.downloadImage(entry) }, enabled = !busyHere) {
+                                Text(if (busyHere) "下载中…" else "自动下载")
                             }
                         }
                         OutlinedButton(onClick = {

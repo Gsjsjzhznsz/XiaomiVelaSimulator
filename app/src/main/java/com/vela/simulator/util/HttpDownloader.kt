@@ -107,8 +107,10 @@ object HttpDownloader {
                             while (true) {
                                 val n = ins.read(buf)
                                 if (n < 0) break
-                                ch.write(ByteBuffer.wrap(buf, 0, n), pos)
-                                pos += n
+                                // v0.2.5 修复：positioned write 可能部分写入（返回值此前被忽略），
+                                // 必须循环写满整个缓冲，否则后续数据错位导致文件损坏
+                                val bb = ByteBuffer.wrap(buf, 0, n)
+                                while (bb.hasRemaining()) pos += ch.write(bb, pos)
                                 onBytes(n.toLong())
                             }
                             if (pos != end + 1) throw IOException("分段长度不符: got ${pos - start}, want ${end - start + 1}")

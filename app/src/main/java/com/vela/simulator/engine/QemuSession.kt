@@ -7,6 +7,7 @@ import com.vela.simulator.vnc.RfbClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +40,10 @@ class QemuSession(
     var vnc: RfbClient? = null
         private set
 
+    /** 串口原始输出（不含 [vela]/[qemu] 前缀），供“控制台画面”兑底视图使用 */
+    private val _consoleLines = MutableStateFlow(listOf<String>())
+    val consoleLines: StateFlow<List<String>> = _consoleLines
+
     private var process: Process? = null
     private var scope: CoroutineScope? = null
     private var logPump: Job? = null
@@ -61,6 +66,7 @@ class QemuSession(
         val complete = parts.dropLast(1).filter { it.isNotEmpty() }
         if (complete.isEmpty()) return
         logLines.value = (logLines.value + complete).takeLast(800)
+        _consoleLines.value = (_consoleLines.value + complete).takeLast(400)
         complete.forEach { FileLogger.sessionLine(it) }
     }
 
@@ -79,7 +85,9 @@ class QemuSession(
         FileLogger.beginSessionLog(template.name)
         FileLogger.i("session", "开始启动会话 template=${template.id} machine=${template.qemu.machine}")
         val plan: QemuArgsBuilder.Plan? = withContext(Dispatchers.IO) {
-            runCatching { QemuArgsBuilder.build(template, imagesDir, runtime.prefixUsr) }
+            runCatching {
+                QemuArgsBuilder.build(template, imagesDir, runtime.prefixUsr, runtime.qemuBinary)
+            }
                 .onFailure { failWith(it.message ?: "构建 QEMU 参数失败", it) }
                 .getOrNull()
         }
@@ -116,11 +124,13 @@ class QemuSession(
         }
 
         // 等待串口就绪并连接
+        // v0.2.5 修复：原实现用 return@repeat 试图退出（对 inline repeat 无效），
+        // 连接成功后仍会继续重连 40 次，反复拆建串口丢失启动期输出。
         sc.launch {
             var connected = false
-            repeat(40) { // 最多 ~20s
+            for (i in 1..40) { // 最多 ~20s
                 delay(500)
-                if (console.connect(plan.serialPort)) { connected = true; return@repeat }
+                if (console.connect(plan.serialPort)) { connected = true; break }
             }
             if (connected) {
                 appendLog("[serial] 已连接串口 tcp:${plan.serialPort}")
@@ -129,19 +139,29 @@ class QemuSession(
             }
         }
 
-        // VNC 客户端
+        // VNC 客户端：连接成功后立即启动帧循环（v0.2.5：原实现从未调用 frameLoop，
+        // 无 FramebufferUpdateRequest 上行，QEMU 永不发送画面）
         if (plan.vncPort > 0) {
             sc.launch {
-                var ok = false
-                repeat(40) {
+                var connected: RfbClient? = null
+                for (i in 1..40) { // 最多 ~20s，等 QEMU VNC 端口就绪
                     delay(500)
                     val client = RfbClient()
-                    if (runCatching { client.connect(plan.vncPort, template.screen.width, template.screen.height) }.getOrDefault(false)) {
-                        vnc = client; ok = true; return@repeat
-                    } else { runCatching { client.close() } }
+                    val ok = runCatching {
+                        client.connect(plan.vncPort, template.screen.width, template.screen.height)
+                    }.getOrDefault(false)
+                    if (ok) { connected = client; break }
+                    runCatching { client.close() }
                 }
-                if (ok) appendLog("[vnc] 已连接 127.0.0.1:${plan.vncPort}")
-                else appendLog("[vnc] 未连接（若镜像无显示设备，画面为空属正常现象）")
+                val client = connected
+                if (client == null) {
+                    appendLog("[vnc] 未连接（若镜像无显示设备，画面将自动以控制台兑底显示）")
+                    return@launch
+                }
+                vnc = client
+                appendLog("[vnc] 已连接 127.0.0.1:${plan.vncPort}")
+                runCatching { client.frameLoop() }
+                    .onFailure { appendLog("[vnc] 画面流中断: ${it.message}") }
             }
         }
 
@@ -173,6 +193,7 @@ class QemuSession(
     fun release() {
         stop()
         logPump?.cancel()
+        scope?.cancel()
         FileLogger.endSessionLog()
     }
 }

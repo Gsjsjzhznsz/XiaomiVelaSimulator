@@ -13,7 +13,13 @@ import java.net.ServerSocket
  *
  * 输出通道：
  *  - 串口 nsh  : -serial tcp:127.0.0.1:<port>,server,nowait（App 作为客户端连接）
- *  - VNC 画面  : -vnc 127.0.0.1:<port>（可选，画面视图）
+ *  - VNC 画面  : -vnc 127.0.0.1::<port>（可选，画面视图）
+ *
+ * v0.2.5 修复（画面全黑根因）：
+ *  - QEMU 二进制路径不再硬编码 bin/qemu-system-arm，由运行时探测结果传入
+ *    （headless 包安装后名为 qemu-system-arm-headless，硬编码导致 exec 失败）；
+ *  - -vnc 地址改为双冒号 host::port 直连端口语法。单冒号 host:port 会被
+ *    QEMU 解析为 display 号（实际监听 5900+port），导致 VNC 客户端永远连不上。
  */
 object QemuArgsBuilder {
 
@@ -29,6 +35,7 @@ object QemuArgsBuilder {
         template: DeviceTemplate,
         imagesDir: File,
         runtimePrefixUsr: File,
+        qemuBin: File,
         enableVnc: Boolean = true,
     ): Plan {
         val q = template.qemu
@@ -38,7 +45,7 @@ object QemuArgsBuilder {
         val serialPort = freePort()
         val vncPort = if (enableVnc) freePort() else 0
 
-        val args = mutableListOf(File(runtimePrefixUsr, "bin/qemu-system-arm").absolutePath)
+        val args = mutableListOf(qemuBin.absolutePath)
 
         when (q.machine) {
             DeviceTemplate.QemuSpec.MACHINE_VIRT -> {
@@ -66,8 +73,8 @@ object QemuArgsBuilder {
         // 串口 → 本地 TCP（nsh 控制台）
         args += listOf("-serial", "tcp:127.0.0.1:$serialPort,server,nowait")
 
-        // VNC 帧缓冲
-        if (vncPort > 0) args += listOf("-vnc", "127.0.0.1:$vncPort")
+        // VNC 帧缓冲（双冒号 = 直连端口；单冒号会被解析为 display 号）
+        if (vncPort > 0) args += listOf("-vnc", "127.0.0.1::$vncPort")
 
         // QEMU 数据文件搜索路径（roms / keymaps），重定向到我们的 prefix
         args += listOf("-L", File(runtimePrefixUsr, "share/qemu").absolutePath)

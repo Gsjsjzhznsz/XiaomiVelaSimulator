@@ -127,6 +127,7 @@ class QemuRuntime(private val context: Context) {
     private val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        .followRedirects(false) // 镜像站无重定向：nju 曾因重定向循环耗尽配额（Too many follow-up requests）
         .addInterceptor(NetUa.interceptor)
         .build()
 
@@ -134,6 +135,7 @@ class QemuRuntime(private val context: Context) {
     private val probeHttp: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
+        .followRedirects(false)
         .addInterceptor(NetUa.interceptor)
         .build()
 
@@ -221,6 +223,14 @@ class QemuRuntime(private val context: Context) {
      * 下载阶段单包失败还会在其余源之间自动换源重试。
      */
     suspend fun install(mirror: String = "auto") = withContext(Dispatchers.IO) {
+        // v0.2.5：RUNTIME_VERSION 变更后使旧版本安装标记失效（原实现只写不读、旧标记永不清理）
+        runCatching {
+            context.filesDir?.listFiles()?.forEach { f ->
+                if (f.name.startsWith("runtime-v") && f.name.endsWith(".installed") && f.name != installMark.name) {
+                    f.delete()
+                }
+            }
+        }
         val abi64 = android.os.Build.SUPPORTED_ABIS.firstOrNull()?.contains("64") == true
         if (mirror == "auto") {
             progress?.onStage("正在竞速选择最快软件源…")

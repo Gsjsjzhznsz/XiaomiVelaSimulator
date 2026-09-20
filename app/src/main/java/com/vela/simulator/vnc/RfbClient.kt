@@ -5,8 +5,8 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 极简 VNC (RFB 3.8) 客户端 —— 仅实现本模拟器需要的路径：
@@ -34,6 +34,14 @@ class RfbClient {
 
     @Volatile
     var frameReady: Boolean = false
+        private set
+
+    /** 帧版本号：每收到一次完整帧缓冲更新 +1，UI 层以此感知重绘（同一 Bitmap 原地写像素不会触发重组） */
+    val frameVersion = AtomicLong(0)
+
+    /** 上一帧是否含非黑像素（无显示设备的镜像发来的帧全黑，UI 用此自动回退控制台画面） */
+    @Volatile
+    var frameHasContent: Boolean = false
         private set
 
     private var width = 0
@@ -86,21 +94,38 @@ class RfbClient {
         framebuffer = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
     }
 
-    /** 设置像素格式为 ARGB8888 小端 + 请求整帧更新，开始读帧循环 */
-    suspend fun frameLoop(onFrame: (Bitmap) -> Unit) {
+    /**
+     * 设置像素格式 + 请求整帧更新，循环读取帧缓冲直到连接关闭。
+     *
+     * v0.2.5 修复（画面全黑第二根因）：
+     *  - SetPixelFormat 16 字节布局此前整体错位（bits-per-pixel 位置写成了 0，
+     *    QEMU 无法按 32bpp 编码），现按 RFB 规范填入：bpp/depth=32、
+     *    little-endian、true-color、max=255×3、shift=16/8/0（对应内存序 B,G,R,X，
+     *    与下方解码循环一致）；
+     *  - FramebufferUpdate 矩形头此前按 5 个 u16 错序读取，实为 x,y,w,h,enc，
+     *    且此前丢弃 numRects 只处理第一个矩形，现按 numRects 逐个解码。
+     *
+     * 必须在 [connect] 成功后调用；阻塞至连接关闭，请在协程中调用。
+     */
+    suspend fun frameLoop(onFrame: ((Bitmap) -> Unit)? = null) {
         val di = din ?: error("not connected")
         val doo = dout ?: error("not connected")
         val w = width; val h = height
+        check(w > 0 && h > 0) { "服务器尺寸非法: ${w}x${h}" }
 
-        // SetPixelFormat: BG32 little-endian (true-color)
+        // SetPixelFormat (msg 0): 16 字节像素格式，多字节字段按协议大端序发送
         val pf = ByteArray(16)
-        pf[0] = 0; pf[1] = 0; pf[2] = 0 // padding x2 + bigEndianFlag=0
-        // bytes: [u8 pad][u8 bigendian? Actually layout: 1 pad,1 bigendian? RFB: 3 bytes = padding(1)+bigEndian(1)+trueColor(1)... ]
-        // 正确布局: 1B padding, 1B big-endian-flag, 1B true-color-flag, 2B red-max, 2B green-max, 2B blue-max, 1B red-shift, 1B green-shift, 1B blue-shift, 3B padding
-        pf[1] = 0; pf[2] = 1
-        putU16(pf, 3, 255); putU16(pf, 5, 255); putU16(pf, 7, 255)
-        pf[9] = 16; pf[10] = 8; pf[11] = 0
-        doo.write(0)          // SetPixelFormat
+        pf[0] = 32  // bits-per-pixel
+        pf[1] = 32  // depth
+        pf[2] = 0   // big-endian-flag = false（像素数据按小端读取）
+        pf[3] = 1   // true-colour-flag = true
+        putU16(pf, 4, 255)   // red-max
+        putU16(pf, 6, 255)   // green-max
+        putU16(pf, 8, 255)   // blue-max
+        pf[10] = 16 // red-shift
+        pf[11] = 8  // green-shift
+        pf[12] = 0  // blue-shift
+        doo.write(0)
         doo.write(pf)
         doo.flush()
 
@@ -111,76 +136,96 @@ class RfbClient {
         doo.writeInt(0) // encoding raw
         doo.flush()
 
-        var bitmap = framebuffer ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        var bitmap = framebuffer ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { framebuffer = it }
         val pixels = IntArray(w * h)
-        val rowBuf = ByteBuffer.allocate(w * 4)
 
-        while (running.get()) {
-            // FramebufferUpdateRequest: incremental=0 每次请求全量（低频，足够演示）
-            synchronized(writeLock) {
-                doo.write(3); doo.write(0)
-                doo.writeShort(0); doo.writeShort(0); doo.writeShort(w); doo.writeShort(h)
-                doo.flush()
-            }
+        try {
+            while (running.get()) {
+                // FramebufferUpdateRequest: incremental=0 请求全量（低频轮询，足够演示）
+                synchronized(writeLock) {
+                    doo.write(3); doo.write(0)
+                    doo.writeShort(0); doo.writeShort(0); doo.writeShort(w); doo.writeShort(h)
+                    doo.flush()
+                }
 
-            val msgType = di.readUnsignedByte()
-            when (msgType) {
-                0 -> { // FramebufferUpdate
-                    di.readUnsignedByte() // pad
-                    di.readUnsignedShort() // rects
-                    val rw = di.readUnsignedShort()
-                    val rx = di.readUnsignedShort()
-                    val ry = di.readUnsignedShort()
-                    val rW = di.readUnsignedShort()
-                    val rH = di.readUnsignedShort()
-                    val enc = di.readInt()
-                    if (enc == 0 && rW > 0 && rH > 0) { // Raw
-                        val bpp = 4
-                        val lineBytes = rW * bpp
-                        val raw = ByteArray(lineBytes)
-                        for (yy in 0 until rH) {
-                            di.readFully(raw)
-                            rowBuf.clear(); rowBuf.put(raw); rowBuf.flip()
-                            // BG32 -> ARGB int
-                            val destY = ry + yy
-                            if (destY < h) {
-                                val x0 = rx
-                                for (xx in 0 until rW) {
-                                    val dx = x0 + xx
-                                    if (dx >= w) break
-                                    val b = raw[xx * 4].toInt() and 0xFF
-                                    val g = raw[xx * 4 + 1].toInt() and 0xFF
-                                    val r = raw[xx * 4 + 2].toInt() and 0xFF
-                                    pixels[destY * w + dx] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+                val msgType = di.readUnsignedByte()
+                when (msgType) {
+                    0 -> { // FramebufferUpdate
+                        di.readUnsignedByte() // pad
+                        val numRects = di.readUnsignedShort()
+                        var content = false
+                        repeat(numRects.coerceAtMost(64)) {
+                            // 矩形头: x(u16) y(u16) w(u16) h(u16) encoding(s32)
+                            val rx = di.readUnsignedShort()
+                            val ry = di.readUnsignedShort()
+                            val rw = di.readUnsignedShort()
+                            val rh = di.readUnsignedShort()
+                            val enc = di.readInt()
+                            if (enc != 0) {
+                                // 只请求了 Raw，理论不应出现其它编码；防御性断开
+                                throw java.io.IOException("非 Raw 编码 rect: enc=$enc")
+                            }
+                            if (rw == 0 || rh == 0) return@repeat
+                            if (rx >= w || ry >= h) {
+                                // 越界矩形：仍需吞掉数据保持流同步
+                                val skip = ByteArray(rw * 4)
+                                for (yy in 0 until rh) di.readFully(skip)
+                                return@repeat
+                            }
+                            val bpp = 4
+                            val lineBytes = rw * bpp
+                            val raw = ByteArray(lineBytes)
+                            val xEnd = minOf(rx + rw, w).coerceAtLeast(rx)
+                            for (yy in 0 until rh) {
+                                di.readFully(raw)
+                                val destY = ry + yy
+                                if (destY >= h) continue
+                                // BG32(小端) -> ARGB int；同时检测是否有非黑像素
+                                for (xx in rx until xEnd) {
+                                    val b = raw[(xx - rx) * 4].toInt() and 0xFF
+                                    val g = raw[(xx - rx) * 4 + 1].toInt() and 0xFF
+                                    val r = raw[(xx - rx) * 4 + 2].toInt() and 0xFF
+                                    pixels[destY * w + xx] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+                                    if (!content && (r or g or b) > 8) content = true
                                 }
                             }
                         }
-                        bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
-                        framebuffer = bitmap
-                        frameReady = true
-                        onFrame(bitmap)
-                    } else {
-                        // 不支持的编码：断开（本客户端只请求 Raw）
-                        close(); return
+                        if (numRects > 0) {
+                            bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
+                            frameHasContent = content
+                            frameReady = true
+                            frameVersion.incrementAndGet()
+                            onFrame?.invoke(bitmap)
+                        }
                     }
-                    rx.toString() // no-op
-                    rw.toString()
+                    1 -> { // SetColourMapEntries
+                        di.readUnsignedByte()
+                        di.readUnsignedShort()
+                        val n = di.readUnsignedShort()
+                        repeat(n) { di.readUnsignedShort(); di.readUnsignedShort(); di.readUnsignedShort() }
+                    }
+                    2 -> { // Bell
+                    }
+                    3 -> { // ServerCutText
+                        di.skipBytes(3)
+                        val len = di.readInt()
+                        if (len > 0 && len < 1 shl 20) {
+                            var left = len
+                            val buf = ByteArray(64 * 1024)
+                            while (left > 0) {
+                                val n = di.read(buf, 0, minOf(left, buf.size))
+                                if (n < 0) throw java.io.IOException("流中断")
+                                left -= n
+                            }
+                        }
+                    }
+                    else -> throw java.io.IOException("未知消息类型: $msgType")
                 }
-                1 -> { // SetColourMapEntries
-                    di.readUnsignedByte()
-                    di.readUnsignedShort()
-                    val n = di.readUnsignedShort()
-                    repeat(n) { di.readUnsignedShort(); di.readUnsignedShort(); di.readUnsignedShort() }
-                }
-                2 -> { // Bell
-                }
-                3 -> { // ServerCutText
-                    di.skipBytes(3)
-                    val len = di.readInt()
-                    if (len > 0 && len < 1 shl 20) di.skipBytes(len) else break
-                }
-                else -> { close(); return }
             }
+        } catch (_: Exception) {
+            // 连接关闭/对端断开：静默退出帧循环（调用方负责清理）
+        } finally {
+            running.set(false)
         }
     }
 

@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.vela.simulator.engine.QemuSession
 import com.vela.simulator.ui.MainViewModel
+import com.vela.simulator.ui.components.ConsoleScreenView
 import com.vela.simulator.ui.components.ConsoleView
 import com.vela.simulator.ui.components.VncDisplayView
 import com.vela.simulator.ui.theme.VelaGreen
@@ -64,15 +65,30 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
     var tab by remember { mutableIntStateOf(0) }
     var input by remember { mutableStateOf("") }
 
-    // VNC 位图刷新：帧循环在 IO 线程，UI 侧定时读取
-    var vncBmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    // VNC 帧缓冲刷新：帧循环在 IO 线程原地写同一 Bitmap（setPixels 不触发重组），
+    // 因此以 frameVersion 变化驱动重绘（v0.2.5 修复画面永远停在首帧/空白）
+    var vncFrame by remember { mutableStateOf<Pair<Long, android.graphics.Bitmap>?>(null) }
     LaunchedEffect(session, state) {
         if (state == QemuSession.State.RUNNING) {
             while (true) {
-                vncBmp = session?.vnc?.framebuffer
-                kotlinx.coroutines.delay(100)
+                val c = session?.vnc
+                val fb = c?.framebuffer
+                if (c != null && fb != null) {
+                    val v = c.frameVersion.get()
+                    if (v > 0 && v != vncFrame?.first) vncFrame = v to fb
+                }
+                kotlinx.coroutines.delay(80)
             }
         }
+    }
+
+    // 画面视图模式：0=自动（有内容帧→VNC，否则控制台兑底） 1=强制VNC 2=强制控制台
+    var displayMode by remember { mutableIntStateOf(0) }
+    val hasVncFrame = vncFrame != null && (session?.vnc?.frameHasContent == true)
+    val showVnc = when (displayMode) {
+        0 -> hasVncFrame
+        1 -> vncFrame != null
+        else -> false
     }
 
     Column(modifier.fillMaxSize()) {
@@ -106,6 +122,23 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
         TabRow(selectedTabIndex = tab, containerColor = VelaSurface) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("控制台") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("画面") })
+        }
+
+        // 画面子模式切换（仅画面页显示）
+        if (tab == 1) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                listOf(0 to "自动", 1 to "VNC 画面", 2 to "控制台画面").forEach { (m, label) ->
+                    androidx.compose.material3.FilterChip(
+                        selected = displayMode == m,
+                        onClick = { displayMode = m },
+                        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                    )
+                }
+            }
         }
 
         when (tab) {
@@ -145,14 +178,20 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
             }
             1 -> {
                 Box(Modifier.weight(1f).fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-                    VncDisplayView(
-                        vncBmp, t, Modifier.fillMaxSize(),
-                        onTouch = { x, y, pressed ->
-                            session?.vnc?.sendTouch(x, y, pressed)
-                        },
-                    )
+                    if (showVnc) {
+                        VncDisplayView(
+                            vncFrame?.second, t, Modifier.fillMaxSize(),
+                            onTouch = { x, y, pressed ->
+                                session?.vnc?.sendTouch(x, y, pressed)
+                            },
+                        )
+                    } else {
+                        // 兑底显示：串口输出直接渲染成设备屏幕（保证一定有画面）
+                        val consoleLines = session?.consoleLines?.collectAsState()?.value ?: emptyList()
+                        ConsoleScreenView(consoleLines, t, Modifier.fillMaxSize())
+                    }
                 }
-                // 画面工具栏: 触摸开关提示 + 截图
+                // 状态提示行
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -162,13 +201,17 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
                         tint = VelaOrange, modifier = Modifier.padding(end = 6.dp),
                     )
                     Text(
-                        "画面支持触摸（PointerEvent → virtio-tablet），MPS2 MCU 镜像无显示设备请使用控制台",
+                        when {
+                            showVnc -> "VNC 画面支持触摸（PointerEvent → virtio-tablet）"
+                            displayMode == 1 -> "等待 VNC 帧…（无帧缓冲设备的镜像请选「控制台画面」）"
+                            else -> "控制台兑底画面：本镜像无帧缓冲或 VNC 未就绪，串口输出实时上屏"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF9A9AA6),
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = {
-                        val bmp = vncBmp
+                        val bmp = vncFrame?.second
                         if (bmp == null) {
                             Toast.makeText(vm.getApplication(), "暂无画面可截取", Toast.LENGTH_SHORT).show()
                         } else {

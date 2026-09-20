@@ -60,6 +60,9 @@ object DebExtractor {
                 }
                 if (rel.isEmpty()) continue
                 val out = File(destDir, rel)
+                // v0.2.5 安全修复：拒绝解包路径穿越（../、绝对路径逃逸出 destDir）
+                val destCanon = destDir.canonicalPath + File.separator
+                if (!out.canonicalPath.startsWith(destCanon)) continue
                 if (e.isSymbolicLink) {
                     out.parentFile?.mkdirs()
                     runCatching {

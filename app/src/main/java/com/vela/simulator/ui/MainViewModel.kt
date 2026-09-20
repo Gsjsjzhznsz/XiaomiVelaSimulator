@@ -105,6 +105,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val stage: String = "",
         val fileProgress: String = "",
         val error: String? = null,
+        /** 正在下载的清单条目 id：避免全局下载状态跨模板串扰（v0.2.5 修复假“已就绪”） */
+        val imageId: String = "",
     )
 
     private val _imageState = MutableStateFlow(ImageUiState())
@@ -114,7 +116,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun downloadImage(entry: ImageManager.ImageEntry) {
         if (downloadJob?.isActive == true) return
-        _imageState.value = ImageUiState(busy = true, stage = "开始下载…")
+        _imageState.value = ImageUiState(busy = true, stage = "开始下载…", imageId = entry.id)
         images.progress = object : QemuRuntime.Progress {
             override fun onStage(stage: String) {
                 _imageState.value = _imageState.value.copy(stage = stage)
@@ -133,11 +135,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { images.download(entry) }
                 .onSuccess {
                     FileLogger.i("image", "镜像下载完成: ${entry.id}")
-                    _imageState.value = ImageUiState(stage = "镜像就绪")
+                    _imageState.value = ImageUiState(stage = "镜像就绪", imageId = entry.id)
                 }
                 .onFailure {
                     FileLogger.e("image", "镜像下载失败: ${entry.id}", it)
-                    _imageState.value = ImageUiState(error = it.message ?: "下载失败")
+                    _imageState.value = ImageUiState(error = it.message ?: "下载失败", imageId = entry.id)
                 }
         }
     }
