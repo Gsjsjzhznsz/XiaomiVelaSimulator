@@ -37,7 +37,7 @@
 | `openvela-mps2-an521-nsh.elf` | `mps2-an521` | Cortex-M33 | 手环类（可自行切换） |
 
 镜像构建自 **openvela/nuttx `dev` 分支**（小米 VELA 官方开源，Apache-2.0），配置为官方 `tools/configure.sh <board>:nsh`。
-其中 `qemu-armv7a` 已在 QEMU 实测验证启动：
+`qemu-armv7a` 与 `mps2-an500` 均已在 QEMU 实测验证启动：
 
 ```
 nx_start: Entry
@@ -51,6 +51,8 @@ nsh> ps
     0     0   0 FIFO     Kthread   - Ready              0000000000000000 0004072 0000712  17.4%  CPU0 IDLE
     2     2 100 RR       Task      - Running            0000000000000000 0004048 0001520  37.5%  nsh_main
 ```
+
+完整启动日志见 [docs/boot_log_qemu-armv7a.txt](docs/boot_log_qemu-armv7a.txt)。
 
 > `mps2-an500/an521` 构建时修复了 openvela dev 分支缺失 `ARM_M_SYSTICK` Kconfig 定义的链接错误（补丁见提交，仅新增 Kconfig 段落，未改动内核源码逻辑）。
 

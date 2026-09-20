@@ -29,9 +29,25 @@
       "files": [
         {
           "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-mps2-an500-nsh.elf",
-          "sha256": "31cf46b400b67016561661bcc01f09d83dda1800d54ff82d8e6352b5f2f797a4",
+          "sha256": "0fb270f8a17a91927cf12132a4df20e77d46c992da8d18a6b563210ee06f0d15",
           "size": 4634404,
           "out": "openvela-mps2-an500-nsh.elf"
+        }
+      ]
+    },
+    {
+      "id": "openvela-mps2-an521-nsh",
+      "name": "openvela · mps2-an521 (Cortex-M33 / 手环类)",
+      "desc": "openvela 官方源码 mps2-an521:nsh 配置构建 (含 ARM_M_SYSTICK 链接修复)。",
+      "machine": "mps2-an521",
+      "kernel": "openvela-mps2-an521-nsh.elf",
+      "source": "open-vela/nuttx dev 分支 mps2-an521:nsh · 构建时间见 Release",
+      "files": [
+        {
+          "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-mps2-an521-nsh.elf",
+          "sha256": "66b3ffb070fb1d0fa6d57d1396e5d36bac738cb65e0f450ebf9420d5fd9854bf",
+          "size": 4498936,
+          "out": "openvela-mps2-an521-nsh.elf"
         }
       ]
     }
