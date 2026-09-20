@@ -61,6 +61,7 @@ fun TemplateDetailScreen(
     onRun: () -> Unit,
     onEdit: () -> Unit,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val t = remember(id) { vm.templateById(id) }
     if (t == null) {
@@ -82,7 +83,7 @@ fun TemplateDetailScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         // 顶栏
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),

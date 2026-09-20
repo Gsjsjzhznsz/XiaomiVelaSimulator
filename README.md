@@ -18,6 +18,8 @@
   - **串口控制台**：实时查看 NuttShell (nsh) 启动日志，支持直接输入命令（`help`、`ps`、`free`、`uname`…）
   - **VNC 画面**：内置极简 RFB 客户端（Raw 编码），呈现帧缓冲画面；圆表自动圆形裁剪
 - **🛠 黑屏修复 + 文件日志（v0.2.1）**：修复启动黑屏（组合被静默跳过）；新增 `vela.log` 文件日志、QEMU 会话日志落盘、崩溃 tombstone 与"分享日志"入口
+- **🎨 MIUIx 设计（v0.2.3，移植自作者另一项目 BandQQ 同款组件）**：悬浮液态玻璃底栏（阻尼拖拽指示 pill + 交互高光）、预测性返回手势（HyperOS 跟手预览 + 左右边缘拖拽兜底）、全功能主题设置（六档主题模式 + Monet 动态取色 + 关键色 + 顶栏底栏模糊 + 液态玻璃开关 + 界面缩放 80%~110% + 动画速度/级联延迟），基于 miuix 组件库
+- **⬇️ 下载链路修复（v0.2.3）**：QEMU 包名更新为 `qemu-system-arm-headless`（Termux 仓库已移除旧包）；apt 索引自动回退 Packages.gz/.bz2/纯文本（官方源已下线 Packages.xz）；统一浏览器 UA 规避镜像 WAF 403；软件源自动级联（官方 → TUNA → BFSU → USTC）；系统镜像下载直连失败自动切换 gh-proxy 等反代
 - **👆 触摸输入（v0.2.0 新增）**
   - 画面视图支持直接触摸/拖动：手势坐标按 letterbox 映射回帧缓冲，经 RFB PointerEvent 上行
   - `virt` 机器自动挂载 `virtio-tablet-pci` 绝对指针设备（模板参数 `touchInput` 可关）
@@ -43,8 +45,11 @@
 
 ## 📦 下载 APK
 
-最新版本：[**Releases**](https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases) · v0.2.1 直链：
-`XiaomiVelaSimulator-v0.2.1-debug.apk`（约 21MB，minSdk 26，Android 8.0+，修复 v0.2.0 启动黑屏）
+最新版本：[**Releases**](https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases) · v0.2.3 直链：
+`XiaomiVelaSimulator-v0.2.3-debug.apk`（约 26MB，minSdk 26，Android 8.0+，MIUIx 设计 + 下载修复）
+
+GitHub 直连不畅时可加反代前缀，例如：
+`https://gh-proxy.com/https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.2.3/XiaomiVelaSimulator-v0.2.3-debug.apk`
 
 ## 📦 三个官方系预编译镜像（见 [Releases](https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/tag/v0.1.0)）
 
@@ -89,7 +94,8 @@ nsh> ps
 ```bash
 git clone https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator.git
 cd XiaomiVelaSimulator
-./gradlew assembleDebug          # 需要 JDK 17 + Android SDK (Platform 34)
+./gradlew assembleDebug          # 编译：JDK 17 + Android SDK (Platform 37)
+./gradlew testDebugUnitTest      # Robolectric 测试：需额外安装 JDK 21（miuix 为 JDK 21 字节码）
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 

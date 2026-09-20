@@ -42,7 +42,7 @@ import com.vela.simulator.ui.theme.VelaOrange
  * 覆盖全部参数：外观 / 硬件 / 特性 / QEMU 仿真参数。
  */
 @Composable
-fun EditorScreen(vm: MainViewModel, id: String?, onBack: () -> Unit) {
+fun EditorScreen(vm: MainViewModel, id: String?, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val base = remember(id) { id?.let { vm.templateById(it) } }
 
     var name by remember { mutableStateOf(base?.name?.removeSuffix("（自定义）")?.plus("（自定义）") ?: "我的 VELA 设备") }
@@ -69,7 +69,7 @@ fun EditorScreen(vm: MainViewModel, id: String?, onBack: () -> Unit) {
         qemu = DeviceTemplate.QemuSpec(machine = machine, cpu = cpu, smp = smp, memoryMb = memMb, extraArgs = extraArgs),
     )
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             Text("模板编辑器", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- miuix-blur 声明 minSdk 33；实际由 isRenderEffectSupported() 运行时门控，
+         Robolectric 单测合并清单时同样需要 override -->
+    <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
+</manifest>

@@ -54,10 +54,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vela.simulator.device.DeviceTemplate
 import com.vela.simulator.ui.MainViewModel
+import com.vela.simulator.ui.components.PageScaffold
 import com.vela.simulator.ui.components.WatchPreview
 import com.vela.simulator.ui.theme.VelaBg
 import com.vela.simulator.ui.theme.VelaGreen
@@ -74,10 +76,23 @@ import java.time.format.DateTimeFormatter
 
 /* ===================== 工坊首页 ===================== */
 
-/** 工坊：快应用模拟 (rpk) + 表盘模拟 (bin) */
+/** 工坊：快应用模拟 (rpk) + 表盘模拟 (bin)（PageScaffold 自带磨砂顶栏） */
 @Composable
-fun WorkshopScreen(vm: MainViewModel, onOpenQuickApp: () -> Unit, onOpenWatchface: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+fun WorkshopScreen(
+    vm: MainViewModel,
+    bottomInnerPadding: Dp = 0.dp,
+    isActive: Boolean = true,
+    onOpenQuickApp: () -> Unit,
+    onOpenWatchface: () -> Unit,
+) {
+    PageScaffold(title = "工坊", bottomInnerPadding = bottomInnerPadding) { inner ->
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+    ) {
+        Spacer(Modifier.height(inner.calculateTopPadding()))
         Text("模拟工坊", style = MaterialTheme.typography.headlineMedium)
         Text(
             "快应用 (.rpk) 与表盘 (.bin) 的包解析与设备外形模拟",
@@ -110,6 +125,9 @@ fun WorkshopScreen(vm: MainViewModel, onOpenQuickApp: () -> Unit, onOpenWatchfac
                 modifier = Modifier.padding(14.dp),
             )
         }
+        // 底部安全余量：悬浮底栏下方不被遮挡
+        Spacer(Modifier.height(bottomInnerPadding + 16.dp))
+    }
     }
 }
 
@@ -188,7 +206,7 @@ fun TemplateChips(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuickAppScreen(vm: MainViewModel, onBack: () -> Unit) {
+fun QuickAppScreen(vm: MainViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val state by vm.quickAppState.collectAsState()
     val templates by vm.templateList.collectAsState()
     var templateId by remember { mutableStateOf<String?>(null) }
@@ -202,7 +220,7 @@ fun QuickAppScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             Text("快应用模拟 (.rpk)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

@@ -53,7 +53,7 @@ import android.widget.Toast
 
 /** 运行页：串口 nsh 控制台 + VNC 帧缓冲画面 双视图 */
 @Composable
-fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit) {
+fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val t = remember(id) { vm.templateById(id) }
     if (t == null) { LaunchedEffect(id) { onBack() }; return }
 
@@ -75,7 +75,7 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         // 顶栏
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }

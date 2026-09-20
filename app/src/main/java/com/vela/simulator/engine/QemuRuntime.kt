@@ -2,6 +2,7 @@ package com.vela.simulator.engine
 
 import android.content.Context
 import com.vela.simulator.util.DebExtractor
+import com.vela.simulator.util.NetUa
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -13,28 +14,65 @@ import java.util.concurrent.TimeUnit
 
 /**
  * QEMU 运行时管理器 —— 仿 Termux 方案：
- * 首次启动时从 Termux 官方 apt 仓库解析 qemu-system-arm 及其依赖树，
+ * 首次启动时从 Termux apt 仓库解析 qemu-system-arm-headless 及其依赖树，
  * 下载 .deb 包并解包到应用私有目录（PREFIX），执行时注入环境变量。
  *
- * 支持 Termux 官方源与清华 TUNA 镜像源切换（国内加速）。
+ * 健壮性设计（v0.2.3，修复用户真机 HTTP 404/403）：
+ * - 包名：Termux 仓库自 qemu 10.x 起更名为 qemu-system-arm-headless（旧的
+ *   qemu-system-arm 已不存在，索引命中后依赖解析为空）；
+ * - 索引格式：仓库已取消 Packages.xz，自动回退 Packages.gz / .bz2 / 纯 Packages；
+ * - UA：默认 okhttp UA 会触发部分镜像站 WAF 403，统一使用浏览器 UA；
+ * - 镜像级联：官方源 → TUNA → BFSU → USTC 逐源自动重试，无需用户手动切换。
  */
 class QemuRuntime(private val context: Context) {
 
     companion object {
         const val REPO_OFFICIAL = "https://packages.termux.dev/apt/termux-main"
         const val REPO_TUNA = "https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main"
-        const val ROOT_PACKAGE = "qemu-system-arm"
-        const val RUNTIME_VERSION = "1" // 运行时目录格式版本
+        const val REPO_BFSU = "https://mirrors.bfsu.edu.cn/termux/apt/termux-main"
+        const val REPO_USTC = "https://mirrors.ustc.edu.cn/termux/apt/termux-main"
+
+        /** 级联顺序：官方源优先（最新），国内镜像作加速/容灾 fallback */
+        val MIRRORS = listOf("official", "tuna", "bfsu", "ustc")
+
+        fun repoBase(mirror: String): String = when (mirror) {
+            "tuna" -> REPO_TUNA
+            "bfsu" -> REPO_BFSU
+            "ustc" -> REPO_USTC
+            else -> REPO_OFFICIAL
+        }
+
+        const val ROOT_PACKAGE = "qemu-system-arm-headless"
+        const val RUNTIME_VERSION = "2" // v2: 包名/索引格式变更，旧安装标记失效需重装
 
         /** Termux 二进制的前缀（编译期硬编码路径），用于 .deb 路径重映射 */
         const val TERMUX_PREFIX = "data/data/com.termux/files"
+
+        /** (文件名, 解压函数) 候选表，顺序即优先级；Termux 仓库已下线 Packages.xz */
+        val INDEX_FORMATS: List<Pair<String, (java.io.InputStream) -> java.io.InputStream>> = listOf(
+            "Packages.xz" to { ins -> org.tukaani.xz.XZInputStream(ins) },
+            "Packages.gz" to { ins -> java.util.zip.GZIPInputStream(ins) },
+            "Packages.bz2" to { ins ->
+                org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream(ins)
+            },
+            "Packages" to { ins -> ins },
+        )
     }
 
     private val json = Json { ignoreUnknownKeys = true }
 
     val prefix: File get() = File(context.filesDir, "qemu-prefix")
     val prefixUsr: File get() = File(prefix, "usr")
-    val qemuBinary: File get() = File(prefixUsr, "bin/qemu-system-arm")
+
+    /**
+     * QEMU 主二进制探测：headless 包安装为 qemu-system-arm-headless，
+     * 旧包（≤9.x）为 qemu-system-arm。运行时自动探测存在的那个。
+     */
+    val qemuBinary: File
+        get() = sequenceOf("bin/qemu-system-arm-headless", "bin/qemu-system-arm")
+            .map { File(prefixUsr, it) }
+            .firstOrNull { it.exists() }
+            ?: File(prefixUsr, "bin/qemu-system-arm-headless")
     val tmpDir: File get() = File(prefixUsr, "tmp")
     val homeDir: File get() = File(prefixUsr, "home")
 
@@ -66,24 +104,44 @@ class QemuRuntime(private val context: Context) {
         fun onLog(line: String)
     }
 
-    private val http = OkHttpClient.Builder()
+    private val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        .addInterceptor(NetUa.interceptor)
         .build()
 
-    private fun repoBase(mirror: String): String = if (mirror == "tuna") REPO_TUNA else REPO_OFFICIAL
-
-    /** 拉取并解析 apt Packages 索引（xz 压缩） */
+    /**
+     * 拉取并解析 apt Packages 索引，自动探测压缩格式。
+     * Termux 仓库 2026 起仅提供 Packages / Packages.gz / Packages.bz2（Packages.xz 已下线）。
+     * 每种格式逐个尝试，404 则换下一个，命中即解析。
+     */
     suspend fun fetchPackageIndex(mirror: String, abi64: Boolean): Map<String, PkgEntry> = withContext(Dispatchers.IO) {
         val arch = if (abi64) "aarch64" else "arm"
-        val url = "${repoBase(mirror)}/dists/stable/main/binary-$arch/Packages.xz"
-        progress?.onStage("获取软件源索引（$arch）")
-        val req = Request.Builder().url(url).build()
-        http.newCall(req).execute().use { resp ->
-            check(resp.isSuccessful) { "获取 Packages.xz 失败: HTTP ${resp.code} ($url)" }
-            val plain = org.tukaani.xz.XZInputStream(resp.body!!.byteStream())
-            parsePackages(plain.bufferedReader().readText())
+        val base = "${repoBase(mirror)}/dists/stable/main/binary-$arch"
+        progress?.onStage("获取软件源索引（$arch @ $mirror）")
+        var lastError: Exception? = null
+        for ((suffix, decompress) in INDEX_FORMATS) {
+            val url = "$base/$suffix"
+            try {
+                val req = Request.Builder().url(url).build()
+                http.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        error("HTTP ${resp.code}")
+                    }
+                    val plain = decompress(resp.body!!.byteStream())
+                    val map = parsePackages(plain.bufferedReader().readText())
+                    if (map.isNotEmpty()) {
+                        progress?.onLog("索引获取成功: $suffix (${map.size} 包)")
+                        return@withContext map
+                    }
+                    error("索引为空")
+                }
+            } catch (e: Exception) {
+                lastError = e
+                progress?.onLog("$suffix 不可用 (${e.message})，尝试下一格式")
+            }
         }
+        throw IllegalStateException("获取 Packages 索引失败（$mirror）: ${lastError?.message}", lastError)
     }
 
     /** 解析 apt Packages 文本格式 */
@@ -129,12 +187,45 @@ class QemuRuntime(private val context: Context) {
 
     var progress: Progress? = null
 
-    /** 完整安装流程：索引 → 依赖闭包 → 下载 → 校验 → 解包 → 授权 */
-    suspend fun install(mirror: String) = withContext(Dispatchers.IO) {
+    /**
+     * 完整安装流程：镜像级联 → 索引 → 依赖闭包 → 下载 → 校验 → 解包 → 授权。
+     * 任一镜像失败自动切换下一个（4G/Wi-Fi 弱网、镜像抽风时用户无感知），
+     * 全部失败才抛出汇总异常。
+     */
+    suspend fun install(mirror: String = "auto") = withContext(Dispatchers.IO) {
+        val candidates = if (mirror == "auto") MIRRORS else listOf(mirror)
+        var lastError: Exception? = null
+        for (m in candidates) {
+            try {
+                progress?.onLog("尝试软件源: $m (${repoBase(m)})")
+                installFrom(m)
+                return@withContext
+            } catch (e: Exception) {
+                lastError = e
+                logMirrorFailure(e, m)
+            }
+        }
+        throw IllegalStateException(
+            "全部软件源均失败（${candidates.joinToString()}），最后错误: ${lastError?.message}",
+            lastError,
+        )
+    }
+
+    /** 镜像失败时记录到应用文件日志（供 vela.log 排障） */
+    private fun logMirrorFailure(e: Exception, mirror: String) {
+        runCatching {
+            com.vela.simulator.util.FileLogger.e(
+                "runtime", "软件源 $mirror 安装失败: ${e.message}", e,
+            )
+        }
+    }
+
+    /** 单一镜像源的完整安装流程 */
+    private suspend fun installFrom(mirror: String) = withContext(Dispatchers.IO) {
         val abi64 = android.os.Build.SUPPORTED_ABIS.firstOrNull()?.contains("64") == true
         val index = fetchPackageIndex(mirror, abi64)
         val deps = resolveDeps(index, ROOT_PACKAGE)
-        check(deps.isNotEmpty()) { "软件源中未找到 $ROOT_PACKAGE，请切换镜像源重试" }
+        check(deps.isNotEmpty()) { "软件源中未找到 $ROOT_PACKAGE" }
         progress?.onStage("需下载 ${deps.size} 个软件包")
 
         val cache = File(context.cacheDir, "debs").apply { mkdirs() }

@@ -37,9 +37,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.vela.simulator.device.DeviceTemplate
 import com.vela.simulator.ui.MainViewModel
+import com.vela.simulator.ui.components.PageScaffold
 import com.vela.simulator.ui.components.WatchPreview
 import com.vela.simulator.ui.theme.VelaGreen
 import com.vela.simulator.ui.theme.VelaOrange
@@ -49,9 +51,14 @@ import com.vela.simulator.ui.theme.VelaSurfaceHigh
 import com.vela.simulator.ui.theme.VelaTextDim
 import com.vela.simulator.util.FileLogger
 
-/** 首页：QEMU 运行时状态 + 设备模板网格 */
+/** 首页：QEMU 运行时状态 + 设备模板网格（PageScaffold 自带磨砂顶栏） */
 @Composable
-fun HomeScreen(vm: MainViewModel, onOpenTemplate: (String) -> Unit) {
+fun HomeScreen(
+    vm: MainViewModel,
+    bottomInnerPadding: Dp = 0.dp,
+    isActive: Boolean = true,
+    onSelect: (String) -> Unit,
+) {
     val templates by vm.templateList.collectAsState()
     val runtime by vm.runtimeState.collectAsState()
 
@@ -59,7 +66,13 @@ fun HomeScreen(vm: MainViewModel, onOpenTemplate: (String) -> Unit) {
     var lastCrash by remember { mutableStateOf<Pair<String, String>?>(null) }
     LaunchedEffect(Unit) { lastCrash = FileLogger.lastCrashSummary() }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    PageScaffold(title = "设备", bottomInnerPadding = bottomInnerPadding) { inner ->
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+    ) {
+        Spacer(Modifier.height(inner.calculateTopPadding()))
         Text("Xiaomi VELA 模拟器", style = MaterialTheme.typography.headlineMedium)
         Text(
             "基于 openvela 官方源码与 QEMU 的可穿戴设备系统仿真",
@@ -111,7 +124,7 @@ fun HomeScreen(vm: MainViewModel, onOpenTemplate: (String) -> Unit) {
             colors = CardDefaults.cardColors(containerColor = VelaSurface),
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth().clickable(enabled = !runtime.busy) {
-                if (!runtime.installed) vm.installRuntime("official")
+                if (!runtime.installed) vm.installRuntime("auto")
             },
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -154,12 +167,17 @@ fun HomeScreen(vm: MainViewModel, onOpenTemplate: (String) -> Unit) {
             modifier = Modifier.weight(1f),
         ) {
             items(templates, key = { it.first.id + it.second.fileName }) { (t, meta) ->
-                TemplateCard(t, meta.source) { onOpenTemplate(t.id) }
+                TemplateCard(t, meta.source) { onSelect(t.id) }
             }
             item {
-                NewTemplateCard { onOpenTemplate("__new__") }
+                NewTemplateCard { onSelect("__new__") }
+            }
+            // 底部安全余量：悬浮底栏下方不被遮挡
+            item {
+                Spacer(Modifier.height(bottomInnerPadding + 12.dp))
             }
         }
+    }
     }
 }
 

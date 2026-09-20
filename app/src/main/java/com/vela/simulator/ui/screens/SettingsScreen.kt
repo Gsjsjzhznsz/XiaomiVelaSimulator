@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -27,26 +30,59 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import android.content.Intent
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.vela.simulator.engine.QemuRuntime
 import com.vela.simulator.ui.MainViewModel
+import com.vela.simulator.ui.components.PageScaffold
 import com.vela.simulator.ui.theme.VelaSurface
 import com.vela.simulator.util.FileLogger
 import java.io.File
 
-/** 设置：QEMU 运行时管理、镜像下载源、关于 */
+/** 设置：主题外观、QEMU 运行时管理、镜像下载源、诊断日志、关于 */
 @Composable
-fun SettingsScreen(vm: MainViewModel) {
+fun SettingsScreen(
+    vm: MainViewModel,
+    bottomInnerPadding: Dp = 0.dp,
+    isActive: Boolean = true,
+    onOpenThemeSettings: () -> Unit,
+) {
     val runtime by vm.runtimeState.collectAsState()
-    var mirror by remember { mutableStateOf("official") }
+    var mirror by remember { mutableStateOf("auto") }
 
+    PageScaffold(title = "设置", bottomInnerPadding = bottomInnerPadding) { inner ->
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
     ) {
-        Text("设置", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 16.dp))
+        Spacer(Modifier.height(inner.calculateTopPadding()))
+        Spacer(Modifier.height(12.dp))
+
+        // 主题与外观入口（MIUIx）
+        Card(
+            colors = CardDefaults.cardColors(containerColor = VelaSurface),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenThemeSettings),
+        ) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("🎨", modifier = Modifier.size(28.dp))
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text("主题与外观", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "主题模式 · 关键色 · 悬浮底栏 · 预测返回 · 动画",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Text("›", style = MaterialTheme.typography.headlineSmall)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
 
         // QEMU 运行时
         Card(colors = CardDefaults.cardColors(containerColor = VelaSurface), shape = RoundedCornerShape(20.dp)) {
@@ -83,6 +119,11 @@ fun SettingsScreen(vm: MainViewModel) {
                 Text("QEMU 运行时下载源（Termux apt 仓库）", style = MaterialTheme.typography.titleMedium)
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
+                        selected = mirror == "auto",
+                        onClick = { mirror = "auto" },
+                        label = { Text("自动（推荐）") },
+                    )
+                    FilterChip(
                         selected = mirror == "official",
                         onClick = { mirror = "official" },
                         label = { Text("官方源") },
@@ -90,11 +131,13 @@ fun SettingsScreen(vm: MainViewModel) {
                     FilterChip(
                         selected = mirror == "tuna",
                         onClick = { mirror = "tuna" },
-                        label = { Text("清华 TUNA 镜像") },
+                        label = { Text("TUNA") },
                     )
                 }
                 Text(
-                    if (mirror == "official") QemuRuntime.REPO_OFFICIAL else QemuRuntime.REPO_TUNA,
+                    if (mirror == "auto")
+                        "官方源 → 清华 TUNA → 北外 BFSU → 中科大 USTC 自动级联重试，无需手动切换"
+                    else if (mirror == "official") QemuRuntime.REPO_OFFICIAL else QemuRuntime.REPO_TUNA,
                     style = MaterialTheme.typography.bodySmall,
                 )
 
@@ -102,7 +145,8 @@ fun SettingsScreen(vm: MainViewModel) {
                 Text("系统镜像下载源", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "默认清单指向本仓库 Release 中托管、基于 openvela 官方源码构建的 QEMU 镜像；" +
-                        "国内网络可配合 ghproxy 等加速前缀使用，或直接导入本地 .elf 镜像。",
+                        "下载时自动尝试直连并逐个切换 gh-proxy 等加速线路，无需配置；" +
+                        "也可直接导入本地 .elf 镜像。",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -170,7 +214,7 @@ fun SettingsScreen(vm: MainViewModel) {
             Column(Modifier.padding(16.dp)) {
                 Text("关于", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Xiaomi VELA Simulator v0.2.1\n" +
+                    "Xiaomi VELA Simulator v0.2.3\n" +
                         "基于 openvela（小米 VELA 开源版，Apache-2.0）与 QEMU。\n" +
                         "本应用为社区学习工具，与 Xiaomi 无隶属或背书关系；" +
                         "设备模板参数为公开资料整理的可编辑预设。",
@@ -178,5 +222,9 @@ fun SettingsScreen(vm: MainViewModel) {
                 )
             }
         }
+
+        // 底部安全余量：悬浮底栏下方不被遮挡
+        Spacer(Modifier.height(bottomInnerPadding + 16.dp))
+    }
     }
 }

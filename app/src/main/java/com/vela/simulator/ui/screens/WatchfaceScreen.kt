@@ -71,7 +71,7 @@ import kotlin.math.sin
  * 提取出的整幅图（面积最大者）作为表盘预览底图。
  */
 @Composable
-fun WatchfaceScreen(vm: MainViewModel, onBack: () -> Unit) {
+fun WatchfaceScreen(vm: MainViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val state by vm.watchfaceState.collectAsState()
     val templates by vm.templateList.collectAsState()
     var templateId by remember { mutableStateOf<String?>(null) }
@@ -87,7 +87,7 @@ fun WatchfaceScreen(vm: MainViewModel, onBack: () -> Unit) {
         if (uri != null) vm.importWatchface(uri)
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             Text("表盘模拟 (.bin)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
