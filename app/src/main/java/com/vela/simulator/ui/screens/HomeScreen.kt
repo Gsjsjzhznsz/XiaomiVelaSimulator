@@ -197,7 +197,7 @@ fun TemplateCard(t: DeviceTemplate, source: String, onClick: () -> Unit) {
             }
             Text(t.name, style = MaterialTheme.typography.labelLarge, maxLines = 1)
             Text(
-                "${t.screen.width}×${t.screen.height} · ${if (t.screen.isRound) "圆形" else "方形"} · $source",
+                "${t.screen.width}×${t.screen.height} · ${t.shapeLabel} · $source",
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
             )

@@ -166,10 +166,12 @@ fun DeviceFrame(
     content: @Composable () -> Unit,
 ) {
     val round = template.screen.isRound
+    // 胶囊形（手环竖长屏）：四角 50% 圆角 → 胶囊轮廓（v0.2.4）
+    val capsule = template.isCapsule
     Box(
         modifier
             .aspectRatioOf(template.screen.width, template.screen.height)
-            .clip(RoundedCornerShape(if (round) 50 else 18))
+            .clip(RoundedCornerShape(if (round || capsule) 50 else 18))
             .background(WatchScreenDark),
         contentAlignment = Alignment.Center,
     ) { content() }

@@ -105,6 +105,10 @@ fun EditorScreen(vm: MainViewModel, id: String?, onBack: () -> Unit, modifier: M
                 FilterChip(selected = shape == "round", onClick = { shape = "round" }, label = { Text("圆形") })
                 FilterChip(selected = shape == "rect", onClick = { shape = "rect" }, label = { Text("方形") })
             }
+            Text(
+                "提示：方形屏中高宽比 ≥ 1.8 的竖长屏（如手环）会自动呈现胶囊圆角外观",
+                style = MaterialTheme.typography.bodySmall,
+            )
 
             Text("屏幕尺寸 ${"%.2f".format(inch)}\"", style = MaterialTheme.typography.labelLarge)
             Slider(inch, { inch = it }, valueRange = 1.0f..2.5f, steps = 14)

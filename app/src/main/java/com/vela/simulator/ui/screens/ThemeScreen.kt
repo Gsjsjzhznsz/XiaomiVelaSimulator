@@ -4,25 +4,28 @@ import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.captionBar
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,16 +34,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vela.simulator.config.VelaConfig
 import com.vela.simulator.ui.LocalEnableBlur
+import com.vela.simulator.ui.components.ScaleDialog
 import com.vela.simulator.ui.theme.ThemeMode
-import com.vela.simulator.ui.theme.VelaOrange
 import com.vela.simulator.ui.util.BlurredBar
 import com.vela.simulator.ui.util.rememberBlurBackdrop
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -49,7 +53,6 @@ import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.layerBackdrop
@@ -64,30 +67,21 @@ import top.yukonga.miuix.kmp.icon.extended.Sidebar
 import top.yukonga.miuix.kmp.icon.extended.Theme
 import top.yukonga.miuix.kmp.icon.extended.Timer
 import top.yukonga.miuix.kmp.icon.extended.Tune
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
 /**
- * 关键色候选（0 = 小米橙品牌默认），圆点选择（比 BandQQ 的下拉更直观）。
- */
-private val KEY_COLOR_OPTIONS: List<Pair<Long, String>> = listOf(
-    0L to "小米橙（默认）",
-    0xFFF44336L to "红色", 0xFFE91E63L to "粉色", 0xFF9C27B0L to "紫色",
-    0xFF673AB7L to "深紫", 0xFF3F51B5L to "靛蓝", 0xFF2196F3L to "蓝色",
-    0xFF00BCD4L to "青色", 0xFF009688L to "蓝绿", 0xFF4CAF50L to "绿色",
-    0xFFFFC107L to "琥珀", 0xFFFF9800L to "橙色", 0xFF795548L to "棕色",
-    0xFF607D8BL to "蓝灰", 0xFFFF8FABL to "樱粉",
-)
-
-/**
- * 主题与外观全屏设置页（BandQQ / KernelSU ColorPaletteScreenMiuix 同构）：
- * 主题预览 → TabRow 三档模式 → Monet + 关键色圆点 → 模糊/悬浮底栏/液态玻璃（二级）
- * → 预测性返回 → 界面缩放/动画速度/动画延迟（内嵌 Slider 实时生效）。
- * 返回箭头/系统返回键退出（外层 PredictiveBackHandler 接管）。
+ * 主题设置页（v0.2.4 对齐 BandQQ / KernelSU ColorPaletteScreenMiuix 的完整结构与交互）：
+ * 主题预览（迷你设备示意图）→ TabRow 三档模式 → Monet + 关键色下拉
+ * → 模糊/悬浮底栏/液态玻璃(二级) → 预测性返回/界面缩放（内嵌 Slider + 数值对话框）
+ * → 动画速度/级联延迟，返回箭头/系统返回键退出。
  */
 @Composable
 fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val configManager = remember { VelaConfig(context) }
 
@@ -105,7 +99,7 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val isDark = mode.isDark || (mode.isSystem && isSystemInDarkTheme())
     val supportBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
-    // 本页自身也走 BlurredBar 方案
+    // 顶栏模糊：本页自身也走 BandQQ 的 BlurredBar 方案
     val blurBackdrop = rememberBlurBackdrop(LocalEnableBlur.current)
     val blurActive = blurBackdrop != null
     val barColor = if (blurActive) Color.Transparent else colorScheme.surface
@@ -131,12 +125,13 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         },
         popupHost = { },
     ) { innerPadding ->
+        val showScaleDialog = rememberSaveable { mutableStateOf(false) }
         var sliderValue by remember(pageScale) { mutableFloatStateOf(pageScale) }
         var speedValue by remember(motionSpeed) { mutableFloatStateOf(motionSpeed) }
         var staggerValue by remember(motionStagger) { mutableFloatStateOf(motionStagger.toFloat()) }
 
         Box(
-            modifier = if (blurBackdrop != null) Modifier.layerBackdrop(blurBackdrop) else Modifier,
+            modifier = if (blurBackdrop != null) Modifier.layerBackdrop(blurBackdrop) else Modifier
         ) {
             Column(
                 modifier = Modifier
@@ -147,9 +142,14 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(innerPadding.calculateTopPadding()))
                 Spacer(Modifier.height(12.dp))
 
-                // ===== 主题实时预览 =====
-                ThemePreviewCard(isDark = isDark, monet = mode.isMonet, keyColor = keyColor)
-                Spacer(Modifier.height(24.dp))
+                // ===== 主题实时预览卡片（BandQQ ThemePreviewCard 同款迷你设备示意图）=====
+                ThemePreviewCard(
+                    isDark = isDark,
+                    monet = mode.isMonet,
+                    floatingBar = floatingBar,
+                    glassBar = navGlass && supportBlur,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // ===== 主题模式 TabRow（跟随系统 / 浅色 / 深色）=====
                 TabRow(
@@ -160,8 +160,12 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     },
                 )
 
-                // ===== Monet + 关键色 =====
-                Card(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
+                // ===== Monet 颜色卡片（BandQQ 同构：开关 + 关键色下拉）=====
+                Card(
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .fillMaxWidth(),
+                ) {
                     SwitchPreference(
                         title = "启用 Monet 颜色",
                         summary = "跟随系统壁纸取色；关闭则使用品牌配色",
@@ -180,12 +184,26 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             }
                         },
                     )
+                    // 关键色下拉与 BandQQ 完全同构（Monet 关闭时显示）
                     AnimatedVisibility(visible = !mode.isMonet) {
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                            Text("关键色", fontSize = 15.sp, color = colorScheme.onBackground)
-                            ColorDotRow(
-                                selected = keyColor,
-                                onSelect = { c -> scope.launch { configManager.setKeyColor(c) } },
+                        Column {
+                            val colorNames = listOf("默认（小米橙）") + KEY_COLOR_OPTIONS.map { it.second }
+                            val colorValues = listOf(0) + KEY_COLOR_OPTIONS.map { it.first }
+                            OverlayDropdownPreference(
+                                title = "关键色",
+                                startAction = {
+                                    Icon(
+                                        MiuixIcons.Tune,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                        contentDescription = "关键色",
+                                        tint = colorScheme.onBackground,
+                                    )
+                                },
+                                items = colorNames,
+                                selectedIndex = colorValues.indexOf(keyColor).takeIf { it >= 0 } ?: 0,
+                                onSelectedIndexChange = { index ->
+                                    scope.launch { configManager.setKeyColor(colorValues[index]) }
+                                },
                             )
                         }
                     }
@@ -193,7 +211,11 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
                 // ===== 模糊 / 悬浮底栏 / 液态玻璃（二级）=====
                 SmallTitle(text = "界面与效果")
-                Card(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
+                Card(
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .fillMaxWidth(),
+                ) {
                     if (supportBlur) {
                         SwitchPreference(
                             title = "模糊",
@@ -212,7 +234,7 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                     SwitchPreference(
                         title = "悬浮底栏",
-                        summary = "MIUIx 风格的悬浮胶囊底栏，支持阻尼拖拽",
+                        summary = "使用 Apple 风格的悬浮底栏",
                         startAction = {
                             Icon(
                                 MiuixIcons.HorizontalSplit,
@@ -222,14 +244,13 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             )
                         },
                         checked = floatingBar,
-                        onCheckedChange = { on ->
-                            scope.launch { configManager.setEnableFloatingBottomBar(on) }
-                        },
+                        onCheckedChange = { on -> scope.launch { configManager.setEnableFloatingBottomBar(on) } },
                     )
+                    // 悬浮底栏开启后的二级选项：液态玻璃（Android 13+）
                     AnimatedVisibility(visible = floatingBar && supportBlur) {
                         SwitchPreference(
                             title = "液态玻璃",
-                            summary = "悬浮底栏的实时折射 + 高光效果",
+                            summary = "启用悬浮底栏的液态玻璃效果（实时折射 + 高光）",
                             startAction = {
                                 Icon(
                                     MiuixIcons.Scan,
@@ -244,14 +265,16 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                 }
 
-                // ===== 预测性返回 / 界面缩放 =====
+                // ===== 预测性返回 / 界面缩放（BandQQ 同构：ArrowPreference + 内嵌 Slider + 对话框）=====
                 SmallTitle(text = "手势与显示")
-                Card(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
+                Card(
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .fillMaxWidth(),
+                ) {
                     SwitchPreference(
                         title = "预测性返回手势",
-                        summary = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-                            "返回手势期间页面跟手预览（重启应用后完全生效）；左右边缘拖拽始终可用"
-                        else "返回手势期间页面跟手预览（当前系统版本使用边缘拖拽实现）",
+                        summary = "返回手势期间页面跟手预览（重启应用后完全生效）；左右边缘拖拽始终可用",
                         startAction = {
                             Icon(
                                 MiuixIcons.Sidebar,
@@ -262,167 +285,265 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         },
                         checked = predictiveBack,
                         onCheckedChange = { on ->
+                            // 对齐 BandQQ/KernelSU：开关只写配置，重启后生效
                             scope.launch { runCatching { configManager.setEnablePredictiveBack(on) } }
                         },
                     )
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("界面缩放", fontSize = 15.sp, color = colorScheme.onBackground)
+
+                    ArrowPreference(
+                        title = "界面缩放",
+                        summary = "调整全局显示比例",
+                        startAction = {
+                            Icon(
+                                MiuixIcons.GridView,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = "界面缩放",
+                                tint = colorScheme.onBackground,
+                            )
+                        },
+                        endActions = {
                             Text(
-                                "${(sliderValue * 100).roundToInt()}%",
-                                fontSize = 13.sp,
+                                text = "${(sliderValue * 100).toInt()}%",
                                 color = colorScheme.onSurfaceVariantActions,
                             )
-                        }
-                        Slider(
-                            value = sliderValue,
-                            onValueChange = { sliderValue = it },
-                            onValueChangeFinished = {
-                                scope.launch { configManager.setPageScale(sliderValue) }
-                            },
-                            valueRange = 0.8f..1.1f,
-                            showKeyPoints = true,
-                            keyPoints = listOf(0.8f, 0.9f, 1f, 1.1f),
-                            magnetThreshold = 0.01f,
-                            hapticEffect = SliderDefaults.SliderHapticEffect.Step,
-                        )
-                    }
+                        },
+                        onClick = { showScaleDialog.value = !showScaleDialog.value },
+                        holdDownState = showScaleDialog.value,
+                        bottomAction = {
+                            Slider(
+                                value = sliderValue,
+                                onValueChange = { sliderValue = it },
+                                onValueChangeFinished = {
+                                    scope.launch { configManager.setPageScale(sliderValue) }
+                                },
+                                valueRange = 0.8f..1.1f,
+                                showKeyPoints = true,
+                                keyPoints = listOf(0.8f, 0.9f, 1f, 1.1f),
+                                magnetThreshold = 0.01f,
+                                hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                            )
+                        },
+                    )
+                    ScaleDialog(
+                        show = showScaleDialog.value,
+                        onDismissRequest = { showScaleDialog.value = false },
+                        volumeState = { pageScale },
+                        onVolumeChange = { scale ->
+                            scope.launch { configManager.setPageScale(scale) }
+                        },
+                    )
                 }
 
-                // ===== 动画：速度 / 级联延迟 =====
+                // ===== 动画：速度 / 级联延迟（实时生效，BandQQ 同构）=====
                 SmallTitle(text = "动画")
-                Card(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("动画速度", fontSize = 15.sp, color = colorScheme.onBackground)
+                Card(
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .fillMaxWidth(),
+                ) {
+                    ArrowPreference(
+                        title = "动画速度",
+                        summary = "页面推入与列表入场的播放速度（0.5x 慢速 ~ 2.0x 极速）",
+                        startAction = {
+                            Icon(
+                                MiuixIcons.Play,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = "动画速度",
+                                tint = colorScheme.onBackground,
+                            )
+                        },
+                        endActions = {
                             Text(
-                                "${(speedValue * 10).roundToInt() / 10.0}x",
-                                fontSize = 13.sp,
+                                text = "${(speedValue * 10).roundToInt() / 10.0}x",
                                 color = colorScheme.onSurfaceVariantActions,
                             )
-                        }
-                        Slider(
-                            value = speedValue,
-                            onValueChange = { speedValue = it },
-                            onValueChangeFinished = {
-                                scope.launch {
-                                    configManager.setMotionSpeed((speedValue * 100).roundToInt() / 100f)
-                                }
-                            },
-                            valueRange = 0.5f..2f,
-                            showKeyPoints = true,
-                            keyPoints = listOf(0.5f, 1f, 1.5f, 2f),
-                            magnetThreshold = 0.01f,
-                            hapticEffect = SliderDefaults.SliderHapticEffect.Step,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("级联延迟", fontSize = 15.sp, color = colorScheme.onBackground)
+                        },
+                        bottomAction = {
+                            Slider(
+                                value = speedValue,
+                                onValueChange = { speedValue = it },
+                                onValueChangeFinished = {
+                                    scope.launch {
+                                        configManager.setMotionSpeed((speedValue * 100).roundToInt() / 100f)
+                                    }
+                                },
+                                valueRange = 0.5f..2f,
+                                showKeyPoints = true,
+                                keyPoints = listOf(0.5f, 1f, 1.5f, 2f),
+                                magnetThreshold = 0.01f,
+                                hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                            )
+                        },
+                    )
+                    ArrowPreference(
+                        title = "动画延迟",
+                        summary = "列表卡片级联入场的逐项间隔",
+                        startAction = {
+                            Icon(
+                                MiuixIcons.Timer,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = "动画延迟",
+                                tint = colorScheme.onBackground,
+                            )
+                        },
+                        endActions = {
                             Text(
-                                "${staggerValue.roundToInt()} ms",
-                                fontSize = 13.sp,
+                                text = "${staggerValue.roundToInt()}ms",
                                 color = colorScheme.onSurfaceVariantActions,
                             )
-                        }
-                        Slider(
-                            value = staggerValue,
-                            onValueChange = { staggerValue = it },
-                            onValueChangeFinished = {
-                                scope.launch { configManager.setMotionStagger(staggerValue.roundToInt()) }
-                            },
-                            valueRange = 0f..300f,
-                        )
-                    }
+                        },
+                        bottomAction = {
+                            Slider(
+                                value = staggerValue,
+                                onValueChange = { staggerValue = it },
+                                onValueChangeFinished = {
+                                    scope.launch { configManager.setMotionStagger(staggerValue.roundToInt()) }
+                                },
+                                valueRange = 0f..300f,
+                                showKeyPoints = true,
+                                keyPoints = listOf(0f, 100f, 200f, 300f),
+                                magnetThreshold = 1f,
+                                hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                            )
+                        },
+                    )
                 }
 
-                Spacer(Modifier.height(24.dp))
+                // 底部留白：导航栏高度 + 余量，内容可从底栏下穿过
+                Spacer(
+                    Modifier.height(
+                        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                            WindowInsets.captionBar.asPaddingValues().calculateBottomPadding() +
+                            12.dp
+                    )
+                )
             }
         }
     }
 }
 
-/** 关键色圆点行：选中态描边高亮 */
-@Composable
-private fun ColorDotRow(selected: Int, onSelect: (Int) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        KEY_COLOR_OPTIONS.forEach { (argb, _) ->
-            val color = if (argb == 0L) VelaOrange else Color(argb)
-            val isSelected = if (argb == 0L) selected == 0 else selected == argb.toInt()
-            Box(
-                Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(color)
-                    .border(
-                        width = if (isSelected) 3.dp else 1.dp,
-                        color = if (isSelected) colorScheme.onBackground
-                        else color.copy(alpha = 0.35f),
-                        shape = CircleShape,
-                    )
-                    .clickable { onSelect(argb.toInt()) },
-            )
-        }
-    }
-}
+/**
+ * 关键色候选（0 = 小米橙品牌默认），结构与 BandQQ KEY_COLOR_OPTIONS 一致。
+ */
+private val KEY_COLOR_OPTIONS: List<Pair<Int, String>> = listOf(
+    0xFFF44336.toInt() to "红色", 0xFFE91E63.toInt() to "粉色", 0xFF9C27B0.toInt() to "紫色",
+    0xFF673AB7.toInt() to "深紫", 0xFF3F51B5.toInt() to "靛蓝", 0xFF2196F3.toInt() to "蓝色",
+    0xFF00BCD4.toInt() to "青色", 0xFF009688.toInt() to "蓝绿", 0xFF4CAF50.toInt() to "绿色",
+    0xFFFFC107.toInt() to "琥珀", 0xFFFF9800.toInt() to "橙色", 0xFF795548.toInt() to "棕色",
+    0xFF607D8B.toInt() to "蓝灰", 0xFFFF8FAB.toInt() to "樱粉",
+)
 
 /**
- * 主题实时预览卡（BandQQ ThemePreviewCard 简化版）：
- * 深浅色块 + 模式说明，随设置即时变化。
+ * 主题实时预览卡片（BandQQ ThemePreviewCard 同款，标题改为本应用名）：
+ * 按当前模式/Monet/悬浮底栏/玻璃状态实时渲染一个迷你设备界面示意。
  */
 @Composable
-private fun ThemePreviewCard(isDark: Boolean, monet: Boolean, keyColor: Int) {
-    val seed = when {
-        keyColor != 0 -> Color(keyColor)
-        monet -> colorScheme.primary
-        else -> VelaOrange
-    }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                if (isDark) "深色主题" else "浅色主题",
-                fontSize = 16.sp,
-                color = colorScheme.onBackground,
-            )
-            Text(
-                when {
-                    monet -> "动态取色已启用（跟随壁纸）"
-                    else -> "品牌配色 · " + (KEY_COLOR_OPTIONS.find { it.first.toInt() == keyColor }?.second ?: "小米橙（默认）")
-                },
-                fontSize = 13.sp,
-                color = colorScheme.onSurfaceVariantActions,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(seed, seed.copy(alpha = 0.6f), seed.copy(alpha = 0.3f)).forEach { c ->
-                    Box(
-                        Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(c),
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Icon(
-                    imageVector = MiuixIcons.GridView,
-                    contentDescription = null,
-                    tint = seed,
-                    modifier = Modifier.size(28.dp),
+private fun ThemePreviewCard(
+    isDark: Boolean,
+    monet: Boolean,
+    floatingBar: Boolean,
+    glassBar: Boolean,
+) {
+    val cs = colorScheme
+    val bgColor = cs.background
+    val cardColor = cs.surfaceVariant
+    val accentColor = cs.primary
+    val navBarColor = cs.surface
+    val textColor = cs.onBackground
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.42f)
+                .height(150.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(bgColor)
+                .border(1.dp, cs.outline, RoundedCornerShape(20.dp)),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "VELA 模拟器",
+                    fontSize = 11.sp,
+                    color = textColor,
+                    modifier = Modifier.padding(start = 4.dp),
                 )
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(24.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(accentColor.copy(alpha = 0.18f)),
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(30.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(cardColor),
+                )
+            }
+
+            if (floatingBar) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 8.dp)
+                        .height(22.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(if (glassBar) navBarColor.copy(alpha = 0.5f) else navBarColor)
+                        .border(0.5.dp, textColor.copy(alpha = 0.12f), RoundedCornerShape(11.dp))
+                        .padding(horizontal = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    repeat(4) {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(if (it == 0) accentColor else textColor.copy(alpha = 0.6f)),
+                        )
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(0.5.dp)
+                            .background(textColor.copy(alpha = 0.1f)),
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(22.dp)
+                            .background(navBarColor)
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        repeat(4) {
+                            Box(
+                                modifier = Modifier
+                                    .size(9.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(if (it == 0) accentColor else textColor.copy(alpha = 0.6f)),
+                            )
+                        }
+                    }
+                }
             }
         }
     }

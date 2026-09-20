@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -36,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -50,6 +52,7 @@ import com.vela.simulator.ui.LocalMotionSpeed
 import com.vela.simulator.ui.LocalMotionStagger
 import com.vela.simulator.ui.MainViewModel
 import com.vela.simulator.ui.components.BottomBar
+import com.vela.simulator.ui.screens.AboutScreen
 import com.vela.simulator.ui.screens.EditorScreen
 import com.vela.simulator.ui.screens.HomeScreen
 import com.vela.simulator.ui.screens.QuickAppScreen
@@ -141,12 +144,14 @@ fun VelaApp(vm: MainViewModel) {
     var showQuickApp by rememberSaveable { mutableStateOf(false) }
     var showWatchface by rememberSaveable { mutableStateOf(false) }
     var showThemeScreen by rememberSaveable { mutableStateOf(false) }
+    var showAbout by rememberSaveable { mutableStateOf(false) }
 
     val overlayOpen = detailId != null || runId != null || editorId != null ||
-        showQuickApp || showWatchface || showThemeScreen
+        showQuickApp || showWatchface || showThemeScreen || showAbout
 
     // 按推入层级关闭最顶层页（后推入的在上层）
     fun closeTop(): Boolean = when {
+        showAbout -> { showAbout = false; true }
         runId != null -> { runId = null; true }
         editorId != null -> { editorId = null; true }
         detailId != null -> { detailId = null; true }
@@ -238,7 +243,11 @@ fun VelaApp(vm: MainViewModel) {
                             vm,
                             bottomInnerPadding = bottomInnerPadding,
                             isActive = page == pagerState.currentPage,
-                            onSelect = { id -> detailId = id },
+                            onSelect = { id ->
+                                // "__new__" 是新建自定义模板入口：直接进编辑器，
+                                // 不进详情页（v0.2.4 修复自定义模板无法打开）
+                                if (id == "__new__") editorId = id else detailId = id
+                            },
                         )
                         VelaTab.Workshop -> WorkshopScreen(
                             vm,
@@ -252,12 +261,14 @@ fun VelaApp(vm: MainViewModel) {
                             bottomInnerPadding = bottomInnerPadding,
                             isActive = page == pagerState.currentPage,
                             onOpenThemeSettings = { showThemeScreen = true },
+                            onOpenAbout = { showAbout = true },
                         )
                     }
                 },
             )
 
             // ===== 全屏推入页（PredictiveBack 手势期间跟手变换）=====
+            // OverlayHost 提供不透明背景 + 触摸吸收层，修复推入页触摸穿透
             AnimatedVisibility(
                 visible = detailId != null,
                 enter = slideInVertically { it } + fadeIn(tween(pushIn)),
@@ -265,13 +276,14 @@ fun VelaApp(vm: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 val id = detailId ?: return@AnimatedVisibility
-                TemplateDetailScreen(
-                    vm, id,
-                    onRun = { runId = id },
-                    onEdit = { editorId = id },
-                    onBack = { detailId = null },
-                    modifier = predictiveTransform,
-                )
+                OverlayHost(transform = predictiveTransform) {
+                    TemplateDetailScreen(
+                        vm, id,
+                        onRun = { runId = id },
+                        onEdit = { editorId = id },
+                        onBack = { detailId = null },
+                    )
+                }
             }
 
             AnimatedVisibility(
@@ -281,7 +293,9 @@ fun VelaApp(vm: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 val id = runId ?: return@AnimatedVisibility
-                RunScreen(vm, id, onBack = { runId = null }, modifier = predictiveTransform)
+                OverlayHost(transform = predictiveTransform) {
+                    RunScreen(vm, id, onBack = { runId = null })
+                }
             }
 
             AnimatedVisibility(
@@ -291,7 +305,9 @@ fun VelaApp(vm: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 val id = editorId
-                EditorScreen(vm, id, onBack = { editorId = null }, modifier = predictiveTransform)
+                OverlayHost(transform = predictiveTransform) {
+                    EditorScreen(vm, id, onBack = { editorId = null })
+                }
             }
 
             AnimatedVisibility(
@@ -300,7 +316,9 @@ fun VelaApp(vm: MainViewModel) {
                 exit = slideOutVertically { it } + fadeOut(tween(pushOut)),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                QuickAppScreen(vm, onBack = { showQuickApp = false }, modifier = predictiveTransform)
+                OverlayHost(transform = predictiveTransform) {
+                    QuickAppScreen(vm, onBack = { showQuickApp = false })
+                }
             }
 
             AnimatedVisibility(
@@ -309,7 +327,9 @@ fun VelaApp(vm: MainViewModel) {
                 exit = slideOutVertically { it } + fadeOut(tween(pushOut)),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                WatchfaceScreen(vm, onBack = { showWatchface = false }, modifier = predictiveTransform)
+                OverlayHost(transform = predictiveTransform) {
+                    WatchfaceScreen(vm, onBack = { showWatchface = false })
+                }
             }
 
             AnimatedVisibility(
@@ -318,7 +338,20 @@ fun VelaApp(vm: MainViewModel) {
                 exit = slideOutVertically { it } + fadeOut(tween(pushOut)),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                ThemeScreen(onBack = { showThemeScreen = false }, modifier = predictiveTransform)
+                OverlayHost(transform = predictiveTransform) {
+                    ThemeScreen(onBack = { showThemeScreen = false })
+                }
+            }
+
+            AnimatedVisibility(
+                visible = showAbout,
+                enter = slideInVertically { it } + fadeIn(tween(pushIn)),
+                exit = slideOutVertically { it } + fadeOut(tween(pushOut)),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                OverlayHost(transform = predictiveTransform) {
+                    AboutScreen(onBack = { showAbout = false })
+                }
             }
 
             // ===== 边缘手势兜底（targetSdk 28 拿不到系统预测进度流）=====
@@ -332,6 +365,33 @@ fun VelaApp(vm: MainViewModel) {
             )
         }
     }
+}
+
+/**
+ * 推入页宿主（v0.2.4 触摸穿透修复）：
+ * - 不透明背景：推入页不再透出底下的 Pager 页面；
+ * - 触摸吸收层：空白区域的指针事件在本层被消费，不再落到底下的
+ *   HorizontalPager/模板卡片上。事件分发 Main pass 自深向浅，
+ *   页内按钮/滚动/AndroidView 先于本层拿到事件，交互不受影响。
+ */
+@Composable
+private fun OverlayHost(transform: Modifier, content: @Composable () -> Unit) {
+    val bg = MiuixTheme.colorScheme.background
+    Box(
+        Modifier
+            .fillMaxSize()
+            .then(transform)
+            .background(bg)
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Main)
+                        event.changes.forEach { it.consume() }
+                        if (event.changes.all { !it.pressed }) break
+                    }
+                }
+            },
+    ) { content() }
 }
 
 /**

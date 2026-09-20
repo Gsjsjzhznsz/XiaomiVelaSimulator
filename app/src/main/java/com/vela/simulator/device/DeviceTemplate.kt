@@ -87,6 +87,23 @@ data class DeviceTemplate(
     val featureLabels: List<String>
         get() = features.map { FEATURE_LABELS[it] ?: it }
 
+    /**
+     * 胶囊形判定（v0.2.4）：非圆形且屏幕高宽比 >= 1.8 的竖长屏
+     * （小米手环 9/10/11、Redmi Band 等均为胶囊/长条屏，观感为全圆角胶囊）。
+     * 渲染层据此把表身画成胶囊、屏幕画成大圆角。
+     */
+    val isCapsule: Boolean
+        get() = !screen.isRound &&
+            screen.height.toFloat() / screen.width.toFloat() >= 1.8f
+
+    /** 屏幕形状中文描述（圆形 / 胶囊 / 方形） */
+    val shapeLabel: String
+        get() = when {
+            screen.isRound -> "圆形"
+            isCapsule -> "胶囊"
+            else -> "方形"
+        }
+
     /** 适合的默认镜像清单条目 id */
     val suggestedImageId: String
         get() = if (qemu.machine == QemuSpec.MACHINE_VIRT) "openvela-armv7a-nsh" else "openvela-${qemu.machine}-nsh"

@@ -31,6 +31,8 @@ fun WatchPreview(
     Canvas(modifier.fillMaxSize()) {
         val s = template.screen
         val round = s.isRound
+        // 胶囊形（v0.2.4）：手环等竖长屏（高宽比 >= 1.8）表身全圆角胶囊，屏幕大圆角
+        val capsule = !round && s.height.toFloat() / s.width >= 1.8f
         val bezel = s.bezelPx / s.width.toFloat()
 
         // 计算适配区域的表体矩形（保持屏幕宽高比）
@@ -50,10 +52,15 @@ fun WatchPreview(
         )
 
         fun drawBody(r: Rect) {
-            if (round) {
-                drawCircle(color = WatchBezel, radius = r.width / 2, center = r.center)
-            } else {
-                drawRoundRect(
+            when {
+                round -> drawCircle(color = WatchBezel, radius = r.width / 2, center = r.center)
+                capsule -> drawRoundRect(
+                    color = WatchBezel,
+                    topLeft = r.topLeft,
+                    size = r.size,
+                    cornerRadius = CornerRadius(r.width / 2),
+                )
+                else -> drawRoundRect(
                     color = WatchBezel,
                     topLeft = r.topLeft,
                     size = r.size,
@@ -63,10 +70,15 @@ fun WatchPreview(
         }
 
         fun drawScreen(r: Rect) {
-            if (round) {
-                drawCircle(color = WatchScreenDark, radius = r.width / 2, center = r.center)
-            } else {
-                drawRoundRect(
+            when {
+                round -> drawCircle(color = WatchScreenDark, radius = r.width / 2, center = r.center)
+                capsule -> drawRoundRect(
+                    color = WatchScreenDark,
+                    topLeft = r.topLeft,
+                    size = r.size,
+                    cornerRadius = CornerRadius(r.width * 0.32f),
+                )
+                else -> drawRoundRect(
                     color = WatchScreenDark,
                     topLeft = r.topLeft,
                     size = r.size,

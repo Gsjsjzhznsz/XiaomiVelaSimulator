@@ -3,6 +3,11 @@ package com.vela.simulator.engine
 import android.content.Context
 import com.vela.simulator.util.NetUa
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -80,14 +85,28 @@ class ImageManager(private val context: Context) {
         return runCatching { QemuRuntime(context).sha256(f).equals(sha256, ignoreCase = true) }.getOrDefault(false)
     }
 
-    /** 下载清单条目中的全部文件（GitHub 资产自动级联反代重试） */
+    /**
+     * 下载清单条目中的全部文件（GitHub 资产自动级联反代重试 + 分段并行提速）。
+     * 多文件时并行下载（并发 3），单文件内部走 HttpDownloader 分段逻辑。
+     */
     suspend fun download(entry: ImageEntry) = withContext(Dispatchers.IO) {
         imagesDir.mkdirs()
+        val sem = Semaphore(3)
+        coroutineScope {
+            entry.files.map { f ->
+                launch(Dispatchers.IO) {
+                    sem.withPermit {
+                        val dest = kernelFile(f.out)
+                        downloadWithFallback(f.url, dest, f.out, f.size)
+                    }
+                }
+            }.joinAll()
+        }
+        // 校验与就绪提示在全部下载完成后统一执行
         for (f in entry.files) {
-            val dest = kernelFile(f.out)
-            downloadWithFallback(f.url, dest, f.out)
             if (f.sha256.isNotEmpty()) {
                 progress?.onStage("SHA256 校验 ${f.out}")
+                val dest = kernelFile(f.out)
                 val actual = QemuRuntime(context).sha256(dest)
                 check(actual.equals(f.sha256, ignoreCase = true)) { "${f.out} SHA256 校验失败" }
             }
@@ -96,16 +115,21 @@ class ImageManager(private val context: Context) {
     }
 
     /**
-     * 单文件下载：直连 → 逐个反代重试。
+     * 单文件下载：直连 → 逐个反代重试，命中线路内部分段并行。
      * 判定标准：HTTP 200 且接收字节数 > 0（部分反代对失效资源返回 200 空体）。
      */
-    private suspend fun downloadWithFallback(url: String, dest: File, label: String) = withContext(Dispatchers.IO) {
+    private suspend fun downloadWithFallback(
+        url: String,
+        dest: File,
+        label: String,
+        expectedSize: Long = 0L,
+    ) = withContext(Dispatchers.IO) {
         var lastError: Exception? = null
         for (proxy in GH_PROXIES) {
             val target = if (proxy.isEmpty()) url else proxy + url
             try {
                 progress?.onLog("下载 $label${if (proxy.isEmpty()) "（直连）" else "（代理 ${proxy.removePrefix("https://").trimEnd('/')})"}")
-                val bytes = httpGet(target, dest, label)
+                val bytes = httpGet(target, dest, label, expectedSize)
                 if (bytes > 0) return@withContext
                 error("响应体为空")
             } catch (e: Exception) {
@@ -118,26 +142,10 @@ class ImageManager(private val context: Context) {
         throw IOException("镜像下载失败（已尝试直连与 ${GH_PROXIES.size - 1} 个代理）: $url", lastError)
     }
 
-    /** 流式下载到 dest，返回接收的字节数（进度回调经 progress） */
-    private fun httpGet(url: String, dest: File, label: String): Long {
-        val req = Request.Builder().url(url).build()
-        http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) error("HTTP ${resp.code}")
-            val body = resp.body!!
-            val total = body.contentLength()
-            var read = 0L
-            dest.outputStream().use { out ->
-                val src = body.byteStream()
-                val buf = ByteArray(128 * 1024)
-                while (true) {
-                    val n = src.read(buf)
-                    if (n < 0) break
-                    out.write(buf, 0, n)
-                    read += n
-                    progress?.onFileProgress(label, read, total)
-                }
-            }
-            return read
+    /** 流式/分段下载到 dest，返回接收的字节数（>1.5MB 自动 4 段并行） */
+    private suspend fun httpGet(url: String, dest: File, label: String, expectedSize: Long): Long = withContext(Dispatchers.IO) {
+        com.vela.simulator.util.HttpDownloader.download(http, url, dest, expectedSize) { read ->
+            progress?.onFileProgress(label, read, -1L)
         }
     }
 

@@ -49,6 +49,7 @@ fun SettingsScreen(
     bottomInnerPadding: Dp = 0.dp,
     isActive: Boolean = true,
     onOpenThemeSettings: () -> Unit,
+    onOpenAbout: () -> Unit = {},
 ) {
     val runtime by vm.runtimeState.collectAsState()
     var mirror by remember { mutableStateOf("auto") }
@@ -134,10 +135,33 @@ fun SettingsScreen(
                         label = { Text("TUNA") },
                     )
                 }
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = mirror == "bfsu",
+                        onClick = { mirror = "bfsu" },
+                        label = { Text("BFSU") },
+                    )
+                    FilterChip(
+                        selected = mirror == "ustc",
+                        onClick = { mirror = "ustc" },
+                        label = { Text("USTC") },
+                    )
+                    FilterChip(
+                        selected = mirror == "nju",
+                        onClick = { mirror = "nju" },
+                        label = { Text("NJU") },
+                    )
+                    FilterChip(
+                        selected = mirror == "sjtu",
+                        onClick = { mirror = "sjtu" },
+                        label = { Text("SJTU") },
+                    )
+                }
                 Text(
                     if (mirror == "auto")
-                        "官方源 → 清华 TUNA → 北外 BFSU → 中科大 USTC 自动级联重试，无需手动切换"
-                    else if (mirror == "official") QemuRuntime.REPO_OFFICIAL else QemuRuntime.REPO_TUNA,
+                        "6 个软件源并发竞速，谁最快用谁；下载阶段 4 路并发 + 分段并行，" +
+                            "单包失败自动换源重试（境外自动命中官方源，境内自动命中教育网镜像）"
+                    else QemuRuntime.repoBase(mirror),
                     style = MaterialTheme.typography.bodySmall,
                 )
 
@@ -210,16 +234,23 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(12.dp))
-        Card(colors = CardDefaults.cardColors(containerColor = VelaSurface), shape = RoundedCornerShape(20.dp)) {
-            Column(Modifier.padding(16.dp)) {
-                Text("关于", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Xiaomi VELA Simulator v0.2.3\n" +
-                        "基于 openvela（小米 VELA 开源版，Apache-2.0）与 QEMU。\n" +
-                        "本应用为社区学习工具，与 Xiaomi 无隶属或背书关系；" +
-                        "设备模板参数为公开资料整理的可编辑预设。",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+
+        // 关于入口（v0.2.4：与 BandQQ 同构的独立关于页）
+        Card(
+            colors = CardDefaults.cardColors(containerColor = VelaSurface),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenAbout),
+        ) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("ℹ️", modifier = Modifier.size(28.dp))
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text("关于", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "版本 · 作者与联系方式 · 仓库 · 项目简介",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Text("›", style = MaterialTheme.typography.headlineSmall)
             }
         }
 

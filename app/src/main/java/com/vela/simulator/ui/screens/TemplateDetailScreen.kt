@@ -63,7 +63,10 @@ fun TemplateDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val t = remember(id) { vm.templateById(id) }
+    // v0.2.4：改为响应式读取模板列表 —— 自定义模板保存后立即打开不再竞态失败；
+    // 仍找不到则温和返回（不再闪退式秒退）
+    val templateList by vm.templateList.collectAsState()
+    val t = remember(id, templateList) { vm.templateById(id) }
     if (t == null) {
         LaunchedEffect(id) { onBack() }
         return
@@ -165,7 +168,7 @@ fun TemplateDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SpecRow("屏幕", "${t.screen.sizeInch}\" ${if (t.screen.isRound) "AMOLED 圆形" else "AMOLED 方形"} · ${t.screen.width}×${t.screen.height} · ${t.screen.dpi}ppi")
+                    SpecRow("屏幕", "${t.screen.sizeInch}\" ${t.shapeLabel}屏 · ${t.screen.width}×${t.screen.height} · ${t.screen.dpi}ppi")
                     SpecRow("处理器", t.hardware.cpuArch)
                     SpecRow("内存/存储",
                         (t.hardware.ramMb?.let { "${it}MB" } ?: "未公开") + " / " +
