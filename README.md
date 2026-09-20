@@ -17,6 +17,18 @@
 - **📟 双视图仿真输出**
   - **串口控制台**：实时查看 NuttShell (nsh) 启动日志，支持直接输入命令（`help`、`ps`、`free`、`uname`…）
   - **VNC 画面**：内置极简 RFB 客户端（Raw 编码），呈现帧缓冲画面；圆表自动圆形裁剪
+- **👆 触摸输入（v0.2.0 新增）**
+  - 画面视图支持直接触摸/拖动：手势坐标按 letterbox 映射回帧缓冲，经 RFB PointerEvent 上行
+  - `virt` 机器自动挂载 `virtio-tablet-pci` 绝对指针设备（模板参数 `touchInput` 可关）
+  - 内置 KeyEvent 通道与截图按钮（保存到应用外部专属目录）
+- **⚡ 快应用模拟 · 模拟工坊（v0.2.0 新增）**
+  - 导入 `.rpk`（快应用 ZIP 容器）：解析 manifest.json（包名/版本/最低平台/入口页面/页面路由/features/permissions）、提取图标、枚举文件清单
+  - 设备外形内模拟启动画面与页面路由跳转，查看 i18n 多语言字符串表
+  - 说明：JS 业务逻辑的完整执行需要快应用引擎，本模块定位为包体检查 + 外形模拟预览
+- **⏱ 表盘模拟 · 模拟工坊（v0.2.0 新增）**
+  - 导入 `.bin` 表盘（也支持 ZIP 容器）：通用资源级解析，扫描提取内嵌 PNG/JPEG（预览图/背景/指针/图标）、ASCII/UTF-8 字符串表、头部十六进制摘要
+  - 按设备外形显示表盘预览底图，叠加**实时走时**（数字/模拟指针双风格随模板）
+  - 15 款设备外形可任意切换预览
 - **⌚ 15 款设备全参数模板**（全部可编辑）
   - Xiaomi Smart Band 9 / 9 Pro / 10 / 10 NFC / 10 Pro / 11 / 11 NFC
   - Xiaomi Watch S3 系列 / S4 系列 / S4 41mm / S4 15 周年纪念版 / S5 系列
@@ -27,6 +39,11 @@
   - 模板编辑器：形状 / 分辨率预设 / 尺寸 / ppi / QEMU 机器与内存 / SMP 核心数 / 附加 QEMU 参数 / 特性开关
   - 自定义模板持久化保存，可随时以任一内置模板为蓝本复制修改
   - 支持导入本地 `.elf` / `.bin` 镜像（SAF 文件选择器）
+
+## 📦 下载 APK
+
+最新版本：[**Releases**](https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases) · v0.2.0 直链：
+`XiaomiVelaSimulator-v0.2.0-debug.apk`（约 20MB，minSdk 26，Android 8.0+）
 
 ## 📦 三个官方系预编译镜像（见 [Releases](https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/tag/v0.1.0)）
 
@@ -63,6 +80,8 @@ nsh> ps
 3. 选择任一设备模板 → 点击 **自动下载** 获取对应镜像（约 0.3–5MB）
 4. **启动模拟** → 切到"控制台"标签，看到 `NuttShell (NSH)` 即成功
 5. 试试输入 `uname -a`、`ps`、`free`
+6. 切到"画面"标签：触摸/拖动可向 guest 发送指针事件（需镜像含显示与输入驱动），支持截图
+7. 底部 **工坊** 标签：导入 `.rpk` 快应用 / `.bin` 表盘进行包解析与外形模拟预览
 
 ## 🔨 自行构建
 
@@ -80,6 +99,10 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ### 为什么 targetSdk 是 28？
 
 Android 10+ 的 W^X 限制禁止 `targetSdk >= 29` 的应用执行应用数据目录中的二进制文件。本应用采用 Termux 同款方案：运行时下载 QEMU 二进制并执行，因此 `targetSdk` 保持 28（Termux 至今如此）。这不影响在 Android 14/15 上运行。
+
+### 触摸在哪些镜像上有效？
+
+触摸链路为：App 手势 → RFB PointerEvent → QEMU `virtio-tablet-pci` → guest 输入驱动。需要镜像同时具备**显示设备 + 输入驱动**（例如带 LVGL 的 openvela 图形配置）才有可见反馈；纯 nsh 串口镜像无显示，触摸无从谈起，属正常现象。MPS2 MCU 板卡本身无触摸外设。
 
 ### 手环模板（MPS2）为什么画面标签是空的？
 
@@ -107,12 +130,14 @@ app/src/main/java/com/vela/simulator/
 ├── device/            设备模板模型 + 仓库（assets 15 款 + 用户自定义）
 ├── engine/
 │   ├── QemuRuntime    Termux 源自动引导：apt 索引解析/依赖闭包/下载/解包
-│   ├── QemuArgsBuilder 模板 → QEMU 命令行（virt/mps2、串口 TCP、VNC 端口）
+│   ├── QemuArgsBuilder 模板 → QEMU 命令行（virt/mps2、串口 TCP、VNC 端口、virtio-tablet）
 │   ├── QemuSession    进程管理 + 日志泵 + 会话状态机
 │   └── ImageManager   清单驱动镜像下载/校验/导入
 ├── terminal/          串口控制台（TCP → nsh）
-├── vnc/               极简 RFB 3.8 客户端（Raw 编码）
-├── ui/                Compose 界面（VELA 手表风：深色 + 小米橙）
+├── vnc/               极简 RFB 3.8 客户端（Raw 编码 + PointerEvent/KeyEvent 上行）
+├── quickapp/          快应用 .rpk 解析（manifest/图标/路由/i18n）
+├── watchface/         表盘 .bin 资源级解析（PNG/JPEG 扫描/字符串/头摘要）
+├── ui/                Compose 界面（VELA 手表风：深色 + 小米橙，含模拟工坊）
 └── util/              .deb 解包（AR/TAR/XZ/Zstd 纯 Java 实现）
 ```
 

@@ -103,7 +103,7 @@ class QemuSession(
             var connected = false
             repeat(40) { // 最多 ~20s
                 delay(500)
-                if (console.connect(plan.serialPort)) { connected = true; break }
+                if (console.connect(plan.serialPort)) { connected = true; return@repeat }
             }
             if (connected) {
                 appendLog("[serial] 已连接串口 tcp:${plan.serialPort}")

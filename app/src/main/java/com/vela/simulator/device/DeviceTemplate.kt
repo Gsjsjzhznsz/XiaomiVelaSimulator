@@ -63,6 +63,8 @@ data class DeviceTemplate(
         val kernel: String = KERNEL_OPENVELA_ARMV7A_NSH,
         /** 附加 QEMU 参数（原样追加） */
         val extraArgs: String = "",
+        /** 触摸输入: virt 机器挂载 virtio-tablet-pci 绝对指针设备，画面视图可触摸 */
+        val touchInput: Boolean = true,
     ) {
         companion object {
             const val MACHINE_VIRT = "virt"

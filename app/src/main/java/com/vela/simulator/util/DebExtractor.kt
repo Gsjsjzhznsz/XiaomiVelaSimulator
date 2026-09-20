@@ -43,7 +43,7 @@ object DebExtractor {
                 }
             }
         }
-        check(found) { "deb 中未找到 data.tar 条目: ${deb.name}" }
+        check(found) { "deb 中未找到 data.tar 条目" }
     }
 
     private fun untar(tarIn: InputStream, destDir: File, stripPrefix: String) {

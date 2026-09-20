@@ -7,8 +7,8 @@ import java.io.File
 
 /**
  * 模板仓库：
- * 1) 内置 15 款官方设备模板（assets/templates/*.json）
- * 2) 用户自定义模板（files/templates/*.json），可增删改
+ * 1) 内置 15 款官方设备模板（assets/templates/ 下按机型命名的 JSON）
+ * 2) 用户自定义模板（files/templates/ 下），可增删改
  */
 class TemplateRepository(private val context: Context) {
 

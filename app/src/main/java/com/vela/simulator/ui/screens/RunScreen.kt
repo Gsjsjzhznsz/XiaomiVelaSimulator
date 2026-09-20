@@ -17,8 +17,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +49,7 @@ import com.vela.simulator.ui.theme.VelaOrange
 import com.vela.simulator.ui.theme.VelaRed
 import com.vela.simulator.ui.theme.VelaSurface
 import com.vela.simulator.ui.theme.VelaSurfaceHigh
+import android.widget.Toast
 
 /** 运行页：串口 nsh 控制台 + VNC 帧缓冲画面 双视图 */
 @Composable
@@ -142,13 +145,44 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit) {
             }
             1 -> {
                 Box(Modifier.weight(1f).fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-                    VncDisplayView(vncBmp, t, Modifier.fillMaxSize())
+                    VncDisplayView(
+                        vncBmp, t, Modifier.fillMaxSize(),
+                        onTouch = { x, y, pressed ->
+                            session?.vnc?.sendTouch(x, y, pressed)
+                        },
+                    )
                 }
-                Text(
-                    "画面来自 QEMU VNC (Raw 编码)。无显示设备的镜像（如 MPS2 MCU 镜像）为空属正常，请使用控制台。",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                )
+                // 画面工具栏: 触摸开关提示 + 截图
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.TouchApp, null,
+                        tint = VelaOrange, modifier = Modifier.padding(end = 6.dp),
+                    )
+                    Text(
+                        "画面支持触摸（PointerEvent → virtio-tablet），MPS2 MCU 镜像无显示设备请使用控制台",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF9A9AA6),
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = {
+                        val bmp = vncBmp
+                        if (bmp == null) {
+                            Toast.makeText(vm.getApplication(), "暂无画面可截取", Toast.LENGTH_SHORT).show()
+                        } else {
+                            val path = vm.saveScreenshot(bmp)
+                            Toast.makeText(
+                                vm.getApplication(),
+                                if (path != null) "已保存: $path" else "保存失败",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }) {
+                        Icon(Icons.Filled.PhotoCamera, "截图")
+                    }
+                }
             }
         }
     }

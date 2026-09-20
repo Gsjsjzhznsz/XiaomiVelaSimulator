@@ -14,6 +14,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 
 /** 全局视图模型：模板、运行时安装、镜像下载、仿真会话 */
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -152,6 +153,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun currentSession(): QemuSession? = session
+
+    // ---- 快应用 / 表盘 / 截图 ----
+    data class ImportUiState<T>(
+        val busy: Boolean = false,
+        val pkg: T? = null,
+        val error: String? = null,
+    )
+
+    private val _quickAppState = MutableStateFlow(ImportUiState<com.vela.simulator.quickapp.RpkManager.QuickAppPackage>())
+    val quickAppState: StateFlow<ImportUiState<com.vela.simulator.quickapp.RpkManager.QuickAppPackage>> = _quickAppState
+
+    private val _watchfaceState = MutableStateFlow(ImportUiState<com.vela.simulator.watchface.WatchfaceManager.WatchfacePackage>())
+    val watchfaceState: StateFlow<ImportUiState<com.vela.simulator.watchface.WatchfaceManager.WatchfacePackage>> = _watchfaceState
+
+    fun importQuickApp(uri: android.net.Uri) {
+        if (_quickAppState.value.busy) return
+        _quickAppState.value = ImportUiState(busy = true)
+        viewModelScope.launch(Dispatchers.IO) {
+            com.vela.simulator.quickapp.RpkManager.import(ctx, uri)
+                .onSuccess { _quickAppState.value = ImportUiState(pkg = it) }
+                .onFailure { _quickAppState.value = ImportUiState(error = it.message ?: "导入失败") }
+        }
+    }
+
+    fun importWatchface(uri: android.net.Uri) {
+        if (_watchfaceState.value.busy) return
+        _watchfaceState.value = ImportUiState(busy = true)
+        viewModelScope.launch(Dispatchers.IO) {
+            com.vela.simulator.watchface.WatchfaceManager.import(ctx, uri)
+                .onSuccess { _watchfaceState.value = ImportUiState(pkg = it) }
+                .onFailure { _watchfaceState.value = ImportUiState(error = it.message ?: "导入失败") }
+        }
+    }
+
+    /** 保存 VNC 截图到应用专属目录，返回路径 */
+    fun saveScreenshot(bmp: android.graphics.Bitmap): String? = runCatching {
+        val dir = ctx.getExternalFilesDir("screenshots") ?: ctx.filesDir
+        val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+        val f = File(dir, "vela_shot_$ts.png")
+        f.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        f.absolutePath
+    }.getOrNull()
 
     override fun onCleared() {
         session?.release()

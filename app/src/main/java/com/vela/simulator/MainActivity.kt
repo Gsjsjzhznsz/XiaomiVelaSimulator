@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -26,9 +27,12 @@ import androidx.navigation.navArgument
 import com.vela.simulator.ui.MainViewModel
 import com.vela.simulator.ui.screens.EditorScreen
 import com.vela.simulator.ui.screens.HomeScreen
+import com.vela.simulator.ui.screens.QuickAppScreen
 import com.vela.simulator.ui.screens.RunScreen
 import com.vela.simulator.ui.screens.SettingsScreen
 import com.vela.simulator.ui.screens.TemplateDetailScreen
+import com.vela.simulator.ui.screens.WatchfaceScreen
+import com.vela.simulator.ui.screens.WorkshopScreen
 import com.vela.simulator.ui.theme.VelaTheme
 
 class MainActivity : ComponentActivity() {
@@ -55,13 +59,19 @@ fun VelaApp(vm: MainViewModel = viewModel()) {
     Scaffold(
         containerColor = com.vela.simulator.ui.theme.VelaBg,
         bottomBar = {
-            if (currentRoute.startsWith("home") || currentRoute == "settings") {
+            if (currentRoute.startsWith("home") || currentRoute == "settings" || currentRoute == "workshop") {
                 NavigationBar(containerColor = com.vela.simulator.ui.theme.VelaSurface) {
                     NavigationBarItem(
                         selected = currentRoute.startsWith("home"),
                         onClick = { nav.navigate("home") { popUpTo("home") { inclusive = true } } },
                         icon = { Icon(Icons.Filled.Home, contentDescription = null) },
                         label = { Text("设备") },
+                    )
+                    NavigationBarItem(
+                        selected = currentRoute == "workshop",
+                        onClick = { nav.navigate("workshop") { launchSingleTop = true } },
+                        icon = { Icon(Icons.Filled.Build, contentDescription = null) },
+                        label = { Text("工坊") },
                     )
                     NavigationBarItem(
                         selected = currentRoute == "settings",
@@ -107,6 +117,19 @@ fun VelaApp(vm: MainViewModel = viewModel()) {
             }
             composable("settings") {
                 SettingsScreen(vm)
+            }
+            composable("workshop") {
+                WorkshopScreen(
+                    vm,
+                    onOpenQuickApp = { nav.navigate("quickapp") { launchSingleTop = true } },
+                    onOpenWatchface = { nav.navigate("watchface") { launchSingleTop = true } },
+                )
+            }
+            composable("quickapp") {
+                QuickAppScreen(vm, onBack = { nav.popBackStack() })
+            }
+            composable("watchface") {
+                WatchfaceScreen(vm, onBack = { nav.popBackStack() })
             }
         }
     }

@@ -45,6 +45,8 @@ object QemuArgsBuilder {
                 args += listOf("-M", "virt", "-cpu", q.cpu)
                 args += listOf("-smp", q.smp.coerceIn(1, 8).toString())
                 args += listOf("-m", q.memoryMb.coerceIn(64, 2048).toString() + "M")
+                // 触摸输入: 绝对指针平板设备（VNC PointerEvent -> virtio input -> guest）
+                if (q.touchInput) args += listOf("-device", "virtio-tablet-pci")
             }
             DeviceTemplate.QemuSpec.MACHINE_MPS2_AN500 -> {
                 args += listOf("-M", "mps2-an500", "-cpu", "cortex-m7")

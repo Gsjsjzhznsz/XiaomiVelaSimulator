@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - 握手 / 认证（None）
  *  - 设置像素格式 ARGB8888（小端 BG32）
  *  - 请求 Raw 编码整帧增量更新
+ *  - 输入事件上行: PointerEvent(触摸/点击) + KeyEvent(按键)
  *  - 输出到 Bitmap 供 Compose 显示
  *
  * NuttX/openvela 的带帧缓冲镜像（如 lvgl demo + virtio-gpu）可通过该视图观察画面；
@@ -24,6 +25,9 @@ class RfbClient {
     private var din: DataInputStream? = null
     private var dout: DataOutputStream? = null
     private val running = AtomicBoolean(false)
+
+    /** 写锁: 帧循环请求与输入事件共用一条输出流，必须串行化 */
+    private val writeLock = Any()
 
     var framebuffer: Bitmap? = null
         private set
@@ -113,9 +117,11 @@ class RfbClient {
 
         while (running.get()) {
             // FramebufferUpdateRequest: incremental=0 每次请求全量（低频，足够演示）
-            doo.write(3); doo.write(0)
-            doo.writeShort(0); doo.writeShort(0); doo.writeShort(w); doo.writeShort(h)
-            doo.flush()
+            synchronized(writeLock) {
+                doo.write(3); doo.write(0)
+                doo.writeShort(0); doo.writeShort(0); doo.writeShort(w); doo.writeShort(h)
+                doo.flush()
+            }
 
             val msgType = di.readUnsignedByte()
             when (msgType) {
@@ -171,7 +177,7 @@ class RfbClient {
                 3 -> { // ServerCutText
                     di.skipBytes(3)
                     val len = di.readInt()
-                    if (len > 0 && len < 1 shl 20) di.skipBytes(len.toLong()) else break
+                    if (len > 0 && len < 1 shl 20) di.skipBytes(len) else break
                 }
                 else -> { close(); return }
             }
@@ -180,6 +186,57 @@ class RfbClient {
 
     private fun putU16(arr: ByteArray, off: Int, v: Int) {
         arr[off] = (v shr 8).toByte(); arr[off + 1] = v.toByte()
+    }
+
+    /**
+     * 发送指针事件（RFB PointerEvent, msg-type=4）—— 触摸/点击的上行通道。
+     * QEMU 侧由 virtio-tablet 等绝对指针设备接收为绝对坐标。
+     * buttonMask: bit0=左键(按下触摸)。
+     */
+    fun sendPointer(x: Int, y: Int, buttonMask: Int) {
+        val d = dout ?: return
+        synchronized(writeLock) {
+            runCatching {
+                d.write(4)
+                d.write(buttonMask and 0xFF)
+                d.writeShort(x.coerceIn(0, 65535))
+                d.writeShort(y.coerceIn(0, 65535))
+                d.flush()
+            }
+        }
+    }
+
+    /** 触摸按下/拖动/抬起 一行式调用: pressed=false 时发送 buttonMask=0 */
+    fun sendTouch(x: Int, y: Int, pressed: Boolean) = sendPointer(x, y, if (pressed) 1 else 0)
+
+    /**
+     * 发送按键事件（RFB KeyEvent, msg-type=3），keysym 为 X11 keysym 编码。
+     * down=false 表示松开。
+     */
+    fun sendKey(keysym: Int, down: Boolean) {
+        val d = dout ?: return
+        synchronized(writeLock) {
+            runCatching {
+                d.write(3)
+                d.write(if (down) 1 else 0)
+                d.writeShort(0)
+                d.writeInt(keysym)
+                d.flush()
+            }
+        }
+    }
+
+    companion object {
+        // 常用 X11 keysym（供后续屏幕按键使用）
+        const val KEY_ENTER = 0xFF0D
+        const val KEY_BACKSPACE = 0xFF08
+        const val KEY_ESCAPE = 0xFF1B
+        const val KEY_TAB = 0xFF09
+        const val KEY_SPACE = 0x0020
+        const val KEY_UP = 0xFF52
+        const val KEY_DOWN = 0xFF54
+        const val KEY_LEFT = 0xFF51
+        const val KEY_RIGHT = 0xFF53
     }
 
     fun close() {
