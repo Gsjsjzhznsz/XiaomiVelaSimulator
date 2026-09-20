@@ -1,0 +1,45 @@
+{
+  "id": "redmi-watch-6",
+  "name": "REDMI Watch 6",
+  "brand": "REDMI",
+  "category": "watch",
+  "releaseYear": 2025,
+  "os": "Xiaomi VELA OS",
+  "screen": {
+    "shape": "rect",
+    "sizeInch": 2.07,
+    "width": 432,
+    "height": 514,
+    "dpi": 292,
+    "bezelPx": 8,
+    "bezelColor": "#1C1C1E"
+  },
+  "hardware": {
+    "cpuArch": "Cortex-A 级 SoC",
+    "ramMb": null,
+    "storageMb": null,
+    "batteryMah": null
+  },
+  "features": [
+    "nfc",
+    "bluetooth",
+    "gps",
+    "heart_rate",
+    "spo2",
+    "ambient_light",
+    "compass"
+  ],
+  "qemu": {
+    "machine": "virt",
+    "cpu": "cortex-a7",
+    "smp": 1,
+    "memoryMb": 512,
+    "kernel": "openvela-qemu-armv7a-nsh.elf",
+    "extraArgs": ""
+  },
+  "ui": {
+    "accentColor": "#FF6900",
+    "watchfaceStyle": "digital"
+  },
+  "note": "屏幕/硬件参数依据公开资料整理，均为可编辑预设；仿真参数决定 QEMU 启动配置。"
+}

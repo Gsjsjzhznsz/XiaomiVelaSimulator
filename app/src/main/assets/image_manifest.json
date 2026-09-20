@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "updated": "2026-09-20",
+  "baseRepo": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator",
+  "images": [
+    {
+      "id": "openvela-armv7a-nsh",
+      "name": "openvela · qemu-armv7a (Cortex-A / 手表类)",
+      "desc": "openvela 官方源码 qemu-armv7a:nsh 配置构建, 已在 QEMU virt 机器验证启动并进入 nsh。",
+      "machine": "virt",
+      "kernel": "openvela-qemu-armv7a-nsh.elf",
+      "source": "open-vela/nuttx dev 分支 qemu-armv7a:nsh · 构建时间见 Release",
+      "files": [
+        {
+          "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-qemu-armv7a-nsh.elf",
+          "sha256": "eb111a044ea6af4d0ce320385949a8d9ca875ec6702f3380aaf865d9b6d842e7",
+          "size": 5115384,
+          "out": "openvela-qemu-armv7a-nsh.elf"
+        }
+      ]
+    },
+    {
+      "id": "openvela-mps2-an500-nsh",
+      "name": "openvela · mps2-an500 (Cortex-M7 / 手环类)",
+      "desc": "openvela 官方源码 mps2-an500:nsh 配置构建 (含 ARM_M_SYSTICK 链接修复), 适用于手环类 MCU 模板。",
+      "machine": "mps2-an500",
+      "kernel": "openvela-mps2-an500-nsh.elf",
+      "source": "open-vela/nuttx dev 分支 mps2-an500:nsh · 构建时间见 Release",
+      "files": [
+        {
+          "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-mps2-an500-nsh.elf",
+          "sha256": "31cf46b400b67016561661bcc01f09d83dda1800d54ff82d8e6352b5f2f797a4",
+          "size": 4634404,
+          "out": "openvela-mps2-an500-nsh.elf"
+        }
+      ]
+    }
+  ]
+}

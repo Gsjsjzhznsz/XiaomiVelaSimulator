@@ -1,0 +1,31 @@
+<resources>
+    <string name="app_name">VELA 模拟器</string>
+    <string name="home_title">Xiaomi VELA 模拟器</string>
+    <string name="home_subtitle">基于 openvela 官方源码与 QEMU 的可穿戴设备系统仿真</string>
+    <string name="runtime_card_title">QEMU 运行时</string>
+    <string name="runtime_not_installed">未安装 · 点击下载</string>
+    <string name="runtime_downloading">正在下载运行时组件…</string>
+    <string name="runtime_ready">就绪</string>
+    <string name="template_list_title">设备模板</string>
+    <string name="custom_template_title">新建自定义模板</string>
+    <string name="btn_run">启动模拟</string>
+    <string name="btn_stop">停止</string>
+    <string name="btn_download_image">下载镜像</string>
+    <string name="btn_import_image">导入本地镜像</string>
+    <string name="tab_console">控制台</string>
+    <string name="tab_display">画面</string>
+    <string name="console_hint">输入 nsh 命令…</string>
+    <string name="settings_title">设置</string>
+    <string name="template_editor_title">模板编辑器</string>
+    <string name="download_progress">%1$s / %2$s</string>
+    <string name="verifying">SHA256 校验中…</string>
+    <string name="verify_ok">校验通过</string>
+    <string name="verify_fail">校验失败</string>
+    <string name="image_ready">镜像已就绪</string>
+    <string name="image_missing">尚未下载镜像</string>
+    <string name="qemu_exited">QEMU 已退出（代码 %1$d）</string>
+    <string name="spec_screen">屏幕</string>
+    <string name="spec_hardware">硬件</string>
+    <string name="spec_features">特性</string>
+    <string name="spec_qemu">仿真参数</string>
+</resources>

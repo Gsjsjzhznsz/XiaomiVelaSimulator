@@ -1,0 +1,24 @@
+# Android / Gradle
+*.iml
+.gradle/
+.idea/
+.kotlin/
+local.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 凭据: 仅本地保存, 绝不入库
+.env.local
+credentials.md
+
+# 运行时产物
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+
+# 杂项
+.DS_Store
+*.log

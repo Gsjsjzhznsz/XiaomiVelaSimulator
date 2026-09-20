@@ -1,0 +1,26 @@
+nx_start: Entry
+uart_register: Registering /dev/console
+uart_register: Registering /dev/ttyS1
+work_start_highpri: Starting high-priority kernel worker thread(s)
+nxtask_activate: hpwork pid=1,TCB=0x40206620
+lib_cxx_initialize: _sinit: 0x637a90 _einit: 0x637a90
+nx_start_application: Starting init thread
+task_spawn: name=nsh_main entry=0x60f55c file_actions=0 attr=0x40205fac argv=0x40205fa8
+nxtask_activate: nsh_main pid=2,TCB=0x40206708
+
+NuttShell (NSH)
+nsh> nx_start: CPU0: Beginning Idle Loop
+uname -a
+nxposix_spawn_exec: ERROR: exec failed: 2
+NuttX 0.0.0 c9ead108 Sep 20 2026 11:55:41 arm qemu-armv7a
+nsh> ps
+nxposix_spawn_exec: ERROR: exec failed: 2
+  PID GROUP PRI POLICY   TYPE    NPX STATE    EVENT     SIGMASK            STACK    USED FILLED COMMAND
+    0     0   0 FIFO     Kthread   - Ready              0000000000000000 0004072 0000712  17.4%  CPU0 IDLE
+    1     0 192 RR       Kthread   - Waiting  Semaphore 0000000000000000 0004024 0000424  10.5%  hpwork 0x40200040 0x40200088
+    2     2 100 RR       Task      - Running            0000000000000000 0004048 0001592  39.3%  nsh_main
+nsh> free
+nxposix_spawn_exec: ERROR: exec failed: 2
+      total       used       free    maxused    maxfree  nused  nfree name
+  132079616       9032  132070584       9392  132070584     25      1 Umem
+nsh> qemu-system-arm: terminating on signal 15 from pid 30405 (timeout)

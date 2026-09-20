@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- VELA 模拟器启动图标: 圆形表盘 + 橙色弧线 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 表身 -->
+    <path
+        android:fillColor="#2A2A33"
+        android:pathData="M54,24 a30,30 0 1,0 0.001,0 z" />
+    <!-- 屏幕 -->
+    <path
+        android:fillColor="#17171E"
+        android:pathData="M54,28 a26,26 0 1,0 0.001,0 z" />
+    <!-- VELA 橙色指针弧 -->
+    <path
+        android:strokeColor="#FF6900"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M54,28 A26,26 0 0,1 78,41"
+        android:fillType="evenOdd" />
+    <!-- 中心点 -->
+    <path
+        android:fillColor="#FF6900"
+        android:pathData="M54,52 a2.5,2.5 0 1,0 0.001,0 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M53,38 L55.2,38 L56.4,50 L51.6,50 Z" />
+</vector>

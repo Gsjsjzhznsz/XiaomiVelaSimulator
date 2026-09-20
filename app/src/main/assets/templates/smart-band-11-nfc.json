@@ -1,0 +1,44 @@
+{
+  "id": "smart-band-11-nfc",
+  "name": "Xiaomi Smart Band 11 NFC",
+  "brand": "Xiaomi",
+  "category": "band",
+  "releaseYear": 2026,
+  "os": "Xiaomi VELA OS",
+  "screen": {
+    "shape": "rect",
+    "sizeInch": 1.72,
+    "width": 224,
+    "height": 528,
+    "dpi": 323,
+    "bezelPx": 8,
+    "bezelColor": "#1C1C1E"
+  },
+  "hardware": {
+    "cpuArch": "Cortex-M 级 MCU",
+    "ramMb": null,
+    "storageMb": null,
+    "batteryMah": null
+  },
+  "features": [
+    "nfc",
+    "bluetooth",
+    "heart_rate",
+    "spo2",
+    "ambient_light",
+    "temperature"
+  ],
+  "qemu": {
+    "machine": "mps2-an500",
+    "cpu": "cortex-m7",
+    "smp": 1,
+    "memoryMb": 16,
+    "kernel": "openvela-mps2-an500-nsh.elf",
+    "extraArgs": ""
+  },
+  "ui": {
+    "accentColor": "#FF6900",
+    "watchfaceStyle": "digital"
+  },
+  "note": "屏幕/硬件参数依据公开资料整理，均为可编辑预设；仿真参数决定 QEMU 启动配置。"
+}
