@@ -6,8 +6,8 @@ v0.3.1 固件 CI 端到端验证（GitHub Actions runner 上运行）。
   1) 分辨率注入：-device virtio-gpu-device,xres=,yres= → guest virtio-gpu
      驱动经 GET_DISPLAY_INFO 跟随宿主 → VNC 初始帧缓冲必须等于注入值
      （v0.3.0 圆表变椭圆的根因即未注入 → 落回 QEMU 默认 1024x768）；
-     注入宽 = 模板宽向上对齐到 32 倍数（QEMU VNC 服务器按脏矩形粒度
-     VNC_DIRTY_PIXELS_PER_BIT=32 上报宽度，高度原样上报，不填充）；
+     注入宽 = 模板宽向上对齐到 16 倍数（QEMU VNC 服务器按脏矩形位图
+     粒度 VNC_DIRTY_PIXELS_PER_BIT=16 上报宽度，高度原样，不填充）；
   2) 画面渲染：LVGL widgets demo 输出非黑帧；
   3) 触摸链路：裸 RFB 点击（按下态抓帧）→ 帧差或串口 indev 日志任一命中
      即 PASS（v0.3.1 固件触摸缩放改为动态读 fb0 分辨率）。
@@ -31,9 +31,13 @@ SER, VNCPORT = args.serial, args.vncport
 LOG = "qemu-ci.log"
 
 # ---------- 1) 启动 QEMU（与 App QemuArgsBuilder 同参形态） ----------
+# 与 App QemuArgsBuilder 一致: 注入宽度向上对齐到 16 倍数
+# (QEMU VNC 按 VNC_DIRTY_PIXELS_PER_BIT=16 上报宽度, 高度原样)
+XR = (args.xres + 15) // 16 * 16
+YR = args.yres
 cmd = ["qemu-system-arm", "-M", "virt", "-cpu", "cortex-a7", "-smp", "1",
        "-m", "512M", "-kernel", os.path.abspath(args.kernel),
-       "-device", f"virtio-gpu-device,xres={args.xres},yres={args.yres}",
+       "-device", f"virtio-gpu-device,xres={XR},yres={YR}",
        "-device", "virtio-tablet-device", "-nic", "none",
        "-display", "none", "-monitor", "none",
        "-serial", f"tcp:127.0.0.1:{SER},server",
@@ -161,7 +165,7 @@ frameA = None; fb_w = fb_h = 0
 for attempt in range(6):
     try:
         v = Vnc()
-        log(f"VNC 握手初始帧缓冲: {v.w}x{v.h} (期望 {(args.xres + 31) // 32 * 32}x{args.yres})")
+        log(f"VNC 握手初始帧缓冲: {v.w}x{v.h} (期望 {XR}x{YR})")
         px, fb_w, fb_h = v.frame()
         v.close()
         nb = nonblack(px)
@@ -172,11 +176,11 @@ for attempt in range(6):
             break
     except (VncFail, EOFError, OSError, socket.timeout) as e:
         log(f"  断连({type(e).__name__}), 2s 重试"); time.sleep(2)
-ok_size = (fb_w == (args.xres + 31) // 32 * 32 and fb_h == args.yres)
+ok_size = (fb_w == XR and fb_h == YR)
 if frameA is None:
     log("显示验证失败: 无非黑帧"); print(open(LOG).read()[-1500:]); sys.exit(4)
 if not ok_size:
-    log(f"FAIL: 帧缓冲 {fb_w}x{fb_h} != 注入 {(args.xres + 31) // 32 * 32}x{args.yres} —— 分辨率注入未生效(椭圆根因)")
+    log(f"FAIL: 帧缓冲 {fb_w}x{fb_h} != 注入 {XR}x{YR} —— 分辨率注入未生效(椭圆根因)")
     sys.exit(5)
 log(">>> 分辨率注入 PASS")
 log(">>> 画面渲染 PASS")

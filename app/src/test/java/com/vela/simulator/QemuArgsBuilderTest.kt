@@ -62,8 +62,8 @@ class QemuArgsBuilderTest {
         val idx = plan.command.indexOf("-device")
         assertTrue("缺少 -device 参数", idx >= 0)
         val dev = plan.command[idx + 1]
-        // 模板默认 466x466 圆表 → 必须显式注入；宽度预对齐到 32 倍数
-        // （QEMU VNC 按脏矩形粒度 32 上报宽度），高度保持模板值
+        // 模板默认 466x466 圆表 → 必须显式注入；宽度预对齐到 16 倍数
+        // （QEMU VNC 按脏矩形位图粒度 16 上报宽度），高度保持模板值
         assertEquals("virtio-gpu-device,xres=480,yres=466", dev)
     }
 
@@ -81,7 +81,8 @@ class QemuArgsBuilderTest {
             runtimePrefixUsr = File("/tmp"), qemuBin = File("/tmp/qemu-system-arm"),
         )
         val dev = plan.command[plan.command.indexOf("-device") + 1]
-        assertEquals("virtio-gpu-device,xres=448,yres=514", dev)
+        // 432 已是 16 倍数，保持不变
+        assertEquals("virtio-gpu-device,xres=432,yres=514", dev)
     }
 
     @Test
