@@ -83,8 +83,15 @@ object QemuArgsBuilder {
                 args += listOf("-m", q.memoryMb.coerceIn(64, 2048).toString() + "M")
                 // 虚拟显卡（v0.3.0）: guest 的 virtio-gpu 帧缓冲驱动通过它渲染画面，
                 // VNC 服务该帧缓冲。注意 mmio 版 virtio-gpu-device 没有 romfile 属性
-                // （PCI 设备才有，实测加 romfile= 直接报 Property not found 退出）
-                args += listOf("-device", "virtio-gpu-device")
+                // （PCI 设备才有，实测加 romfile= 直接报 Property not found 退出）。
+                // v0.3.1: 按设备模板屏幕参数注入 xres/yres —— 单一 full 固件服务
+                // 全部机型（bandQQ 同款思路）：guest virtio-gpu 驱动经
+                // VIRTIO_GPU_CMD_GET_DISPLAY_INFO 跟随宿主 scanout 尺寸，
+                // LVGL/lvgldemo 再按 fb0 varinfo 自适应。不注入时 QEMU 用默认
+                // 1024x768(4:3)，圆表 letterbox 后被裁成“椭圆”（真机反馈）。
+                val xres = template.screen.width.coerceIn(64, 4096)
+                val yres = template.screen.height.coerceIn(64, 4096)
+                args += listOf("-device", "virtio-gpu-device,xres=$xres,yres=$yres")
                 // 触摸输入（v0.3.0 修正为 mmio 总线: NuttX 无 virtio-pci 驱动）
                 // VNC PointerEvent(绝对坐标) → virtio-tablet → guest /dev/input0
                 if (q.touchInput) args += listOf("-device", "virtio-tablet-device")

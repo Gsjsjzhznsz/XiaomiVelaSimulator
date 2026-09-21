@@ -1,0 +1,73 @@
+# v0.3.1 起的发布流水线：
+#   tag 推送 (v*) → ① e2e-verify: runner 上用 qemu-system-arm 真跑固件
+#   （分辨率注入 + 画面渲染 + 触摸链路三项门控，对应 v0.3.0 真机反馈的
+#   「圆屏变椭圆 / 点击无反应」两类问题）→ ② build-apk: 单测 + assembleDebug，
+#   全部通过才把 APK 附加到同名 Release（Release 本体与固件 ELF 由发布方
+#   在创建 tag 时预先上传，e2e 直接从本 Release 下载待验固件）。
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  e2e-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install QEMU (arm-softmmu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-arm
+          qemu-system-arm --version
+      - name: Check virtio-gpu-device availability
+        run: |
+          qemu-system-arm -M virt -device help | grep -i "virtio-gpu"
+          qemu-system-arm -M virt -device help | grep -i "virtio-tablet"
+      - name: Download firmware under test from this release
+        run: |
+          curl -sSL --fail -o nuttx.elf \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/openvela-qemu-armv7a-full.elf"
+          ls -la nuttx.elf
+          sha256sum nuttx.elf
+      - name: E2E verify (resolution injection + display + touch)
+        run: |
+          pip3 install --quiet pillow
+          python3 scripts/ci/verify_firmware_ci.py --kernel nuttx.elf --xres 466 --yres 466
+      - name: E2E verify band resolution (432x514)
+        run: |
+          python3 scripts/ci/verify_firmware_ci.py --kernel nuttx.elf --xres 432 --yres 514 --serial 4445 --vncport 5906
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screens
+          path: |
+            e2e-frameA.png
+            e2e-frameB.png
+            qemu-ci.log
+          if-no-files-found: ignore
+
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: e2e-verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Enable gradle wrapper
+        run: chmod +x gradlew
+      - name: Run unit tests and build debug APK
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+      - name: Upload APK to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/debug/*.apk
+          fail_on_unmatched_files: true

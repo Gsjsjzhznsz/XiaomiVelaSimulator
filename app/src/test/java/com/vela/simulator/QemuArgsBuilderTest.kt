@@ -9,9 +9,12 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * QemuArgsBuilder 单元测试（v0.3.0）：
- * 锁定「有画面 + 有触控」的两个关键 QEMU 参数 —— virtio-gpu 显示设备与
- * virtio-mmio 触摸设备（此前 virtio-tablet-pci 因 guest 无 PCI 总线驱动而失效）。
+ * QemuArgsBuilder 单元测试（v0.3.0/v0.3.1）：
+ * 锁定「有画面 + 有触控 + 不变形」的关键 QEMU 参数 ——
+ * 1) virtio-gpu 显示设备且分辨率来自模板屏幕参数（单固件服务多机型，
+ *    不注入则 QEMU 默认 1024x768，圆表 letterbox 后被裁成椭圆）；
+ * 2) virtio-mmio 触摸设备（此前 virtio-tablet-pci 因 guest 无 PCI 总线驱动而失效）；
+ * 3) 禁 romfile / 禁 -nodefaults / -nic none（Termux 真机实测的启动失败与输入丢失点）。
  */
 class QemuArgsBuilderTest {
 
@@ -50,7 +53,7 @@ class QemuArgsBuilderTest {
     }
 
     @Test
-    fun `virt machine includes virtio gpu with empty romfile`() {
+    fun `virt machine includes virtio gpu with template resolution`() {
         val images = newImagesDir("openvela-qemu-armv7a-full.elf")
         val plan = QemuArgsBuilder.build(
             virtTemplate(), images,
@@ -58,7 +61,26 @@ class QemuArgsBuilderTest {
         )
         val idx = plan.command.indexOf("-device")
         assertTrue("缺少 -device 参数", idx >= 0)
-        assertEquals("virtio-gpu-device", plan.command[idx + 1])
+        val dev = plan.command[idx + 1]
+        // 模板默认 466x466 圆表 → 必须显式注入，否则 QEMU 默认 1024x768(4:3)
+        assertEquals("virtio-gpu-device,xres=466,yres=466", dev)
+    }
+
+    @Test
+    fun `gpu resolution follows template screen for non square devices`() {
+        val images = newImagesDir("openvela-qemu-armv7a-full.elf")
+        val plan = QemuArgsBuilder.build(
+            virtTemplate().copy(
+                screen = DeviceTemplate.ScreenSpec(
+                    shape = DeviceTemplate.ScreenSpec.SHAPE_RECT,
+                    width = 432,
+                    height = 514,
+                ),
+            ), images,
+            runtimePrefixUsr = File("/tmp"), qemuBin = File("/tmp/qemu-system-arm"),
+        )
+        val dev = plan.command[plan.command.indexOf("-device") + 1]
+        assertEquals("virtio-gpu-device,xres=432,yres=514", dev)
     }
 
     @Test
@@ -73,9 +95,11 @@ class QemuArgsBuilderTest {
         assertTrue("缺少 -nic none（默认网卡 ROM 依赖会导致启动失败）", i > 0)
         assertEquals("none", plan.command[i + 1])
         // mmio 版 virtio-gpu-device 没有 romfile 属性（PCI 才有），加了会直接退出
+        val gpu = plan.command.firstOrNull { it.startsWith("virtio-gpu-device") }
+        assertTrue("缺少 virtio-gpu-device", gpu != null)
         assertFalse(
             "virtio-gpu-device 禁止带 romfile 属性",
-            plan.command.any { it.startsWith("virtio-gpu-device,") },
+            gpu!!.contains("romfile"),
         )
         // -nodefaults 会让 VNC 输入控制台无绑定，指针事件无法路由 → 必须禁用
         assertFalse(
@@ -121,7 +145,7 @@ class QemuArgsBuilderTest {
             mps2Template(DeviceTemplate.QemuSpec.MACHINE_MPS2_AN500), images,
             runtimePrefixUsr = File("/tmp"), qemuBin = File("/tmp/qemu-system-arm"),
         )
-        assertFalse(plan.command.contains("virtio-gpu-device"))
+        assertFalse(plan.command.any { it.startsWith("virtio-gpu-device") })
         assertFalse(plan.command.contains("virtio-tablet-device"))
         assertEquals(0, plan.vncPort % 1) // vncPort 有效
     }

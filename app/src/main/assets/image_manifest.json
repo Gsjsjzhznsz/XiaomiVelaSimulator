@@ -1,71 +1,71 @@
 {
-  "version": 1,
-  "updated": "2026-09-21",
-  "baseRepo": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator",
-  "images": [
+ "version": 1,
+ "updated": "2026-09-21",
+ "baseRepo": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator",
+ "images": [
+  {
+   "id": "openvela-armv7a-full",
+   "name": "openvela · qemu-armv7a 图形版 (Cortex-A / 手表类)",
+   "desc": "openvela 官方源码 qemu-armv7a:full 配置构建: LVGL 9.2.1 图形栈 + virtio-gpu 显示 + virtio-input 触摸, 自动启动 lvgldemo 界面。含本地修复补丁: 触摸坐标按 /dev/fb0 实际分辨率动态缩放(单固件适配全部机型分辨率, v0.3.1)+BTN_LEFT 接触门控(点击无反应)+释放样本 npoints=1 惯例(变长样本导致释放丢失)+lvgldemo 指向 /dev/fb0。显示分辨率由 App 按设备模板经 QEMU virtio-gpu xres/yres 注入, 圆表获得方形帧缓冲(修复 v0.3.0 圆屏变椭圆)。",
+   "machine": "virt",
+   "kernel": "openvela-qemu-armv7a-full.elf",
+   "source": "open-vela/nuttx dev 分支 qemu-armv7a:full · LVGL 9.2.1 · 构建时间见 Release",
+   "files": [
     {
-      "id": "openvela-armv7a-full",
-      "name": "openvela · qemu-armv7a 图形版 (Cortex-A / 手表类)",
-      "desc": "openvela 官方源码 qemu-armv7a:full 配置构建: LVGL 9.2.1 图形栈 + virtio-gpu 显示 + virtio-input 触摸, 自动启动 lvgldemo 界面。含本地修复补丁: 触摸坐标缩放与 BTN_LEFT 接触门控(点击无反应)、释放样本 npoints=1 惯例(变长样本导致释放丢失)、lvgldemo 指向 /dev/fb0。已在 QEMU virt 机器端到端验证画面渲染与触摸交互。",
-      "machine": "virt",
-      "kernel": "openvela-qemu-armv7a-full.elf",
-      "source": "open-vela/nuttx dev 分支 qemu-armv7a:full · LVGL 9.2.1 · 构建时间见 Release",
-      "files": [
-        {
-          "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.3.0/openvela-qemu-armv7a-full.elf",
-          "sha256": "3cf6671d1fbcf7379c89f9358ed1abaa8474699b043e23026b34120eefdc602d",
-          "size": 16002700,
-          "out": "openvela-qemu-armv7a-full.elf"
-        }
-      ]
-    },
-    {
-      "id": "openvela-armv7a-nsh",
-      "name": "openvela · qemu-armv7a (Cortex-A / 手表类)",
-      "desc": "openvela 官方源码 qemu-armv7a:nsh 配置构建, 已在 QEMU virt 机器验证启动并进入 nsh。",
-      "machine": "virt",
-      "kernel": "openvela-qemu-armv7a-nsh.elf",
-      "source": "open-vela/nuttx dev 分支 qemu-armv7a:nsh · 构建时间见 Release",
-      "files": [
-        {
-          "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-qemu-armv7a-nsh.elf",
-          "sha256": "eb111a044ea6af4d0ce320385949a8d9ca875ec6702f3380aaf865d9b6d842e7",
-          "size": 5115384,
-          "out": "openvela-qemu-armv7a-nsh.elf"
-        }
-      ]
-    },
-    {
-      "id": "openvela-mps2-an500-nsh",
-      "name": "openvela · mps2-an500 (Cortex-M7 / 手环类)",
-      "desc": "openvela 官方源码 mps2-an500:nsh 配置构建 (含 ARM_M_SYSTICK 链接修复), 适用于手环类 MCU 模板。",
-      "machine": "mps2-an500",
-      "kernel": "openvela-mps2-an500-nsh.elf",
-      "source": "open-vela/nuttx dev 分支 mps2-an500:nsh · 构建时间见 Release",
-      "files": [
-        {
-          "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-mps2-an500-nsh.elf",
-          "sha256": "0fb270f8a17a91927cf12132a4df20e77d46c992da8d18a6b563210ee06f0d15",
-          "size": 4634404,
-          "out": "openvela-mps2-an500-nsh.elf"
-        }
-      ]
-    },
-    {
-      "id": "openvela-mps2-an521-nsh",
-      "name": "openvela · mps2-an521 (Cortex-M33 / 手环类)",
-      "desc": "openvela 官方源码 mps2-an521:nsh 配置构建 (含 ARM_M_SYSTICK 链接修复)。",
-      "machine": "mps2-an521",
-      "kernel": "openvela-mps2-an521-nsh.elf",
-      "source": "open-vela/nuttx dev 分支 mps2-an521:nsh · 构建时间见 Release",
-      "files": [
-        {
-          "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-mps2-an521-nsh.elf",
-          "sha256": "66b3ffb070fb1d0fa6d57d1396e5d36bac738cb65e0f450ebf9420d5fd9854bf",
-          "size": 4498936,
-          "out": "openvela-mps2-an521-nsh.elf"
-        }
-      ]
+     "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.3.1/openvela-qemu-armv7a-full.elf",
+     "sha256": "b87bd4327184b52757b75a0bd50c2dd8aea2e9ccae495d581f1c8356a3f774be",
+     "size": 16004336,
+     "out": "openvela-qemu-armv7a-full.elf"
     }
-  ]
+   ]
+  },
+  {
+   "id": "openvela-armv7a-nsh",
+   "name": "openvela · qemu-armv7a (Cortex-A / 手表类)",
+   "desc": "openvela 官方源码 qemu-armv7a:nsh 配置构建, 已在 QEMU virt 机器验证启动并进入 nsh。",
+   "machine": "virt",
+   "kernel": "openvela-qemu-armv7a-nsh.elf",
+   "source": "open-vela/nuttx dev 分支 qemu-armv7a:nsh · 构建时间见 Release",
+   "files": [
+    {
+     "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-qemu-armv7a-nsh.elf",
+     "sha256": "eb111a044ea6af4d0ce320385949a8d9ca875ec6702f3380aaf865d9b6d842e7",
+     "size": 5115384,
+     "out": "openvela-qemu-armv7a-nsh.elf"
+    }
+   ]
+  },
+  {
+   "id": "openvela-mps2-an500-nsh",
+   "name": "openvela · mps2-an500 (Cortex-M7 / 手环类)",
+   "desc": "openvela 官方源码 mps2-an500:nsh 配置构建 (含 ARM_M_SYSTICK 链接修复), 适用于手环类 MCU 模板。",
+   "machine": "mps2-an500",
+   "kernel": "openvela-mps2-an500-nsh.elf",
+   "source": "open-vela/nuttx dev 分支 mps2-an500:nsh · 构建时间见 Release",
+   "files": [
+    {
+     "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-mps2-an500-nsh.elf",
+     "sha256": "0fb270f8a17a91927cf12132a4df20e77d46c992da8d18a6b563210ee06f0d15",
+     "size": 4634404,
+     "out": "openvela-mps2-an500-nsh.elf"
+    }
+   ]
+  },
+  {
+   "id": "openvela-mps2-an521-nsh",
+   "name": "openvela · mps2-an521 (Cortex-M33 / 手环类)",
+   "desc": "openvela 官方源码 mps2-an521:nsh 配置构建 (含 ARM_M_SYSTICK 链接修复)。",
+   "machine": "mps2-an521",
+   "kernel": "openvela-mps2-an521-nsh.elf",
+   "source": "open-vela/nuttx dev 分支 mps2-an521:nsh · 构建时间见 Release",
+   "files": [
+    {
+     "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.1.0/openvela-mps2-an521-nsh.elf",
+     "sha256": "66b3ffb070fb1d0fa6d57d1396e5d36bac738cb65e0f450ebf9420d5fd9854bf",
+     "size": 4498936,
+     "out": "openvela-mps2-an521-nsh.elf"
+    }
+   ]
+  }
+ ]
 }

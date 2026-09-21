@@ -121,9 +121,15 @@ fun VncDisplayView(
                 val g = geometry(bitmap)
                 val img = bitmap.asImageBitmap()
                 if (round) {
-                    val path = Path().apply {
-                        addOval(Rect(g.left, g.top, g.right, g.bottom))
-                    }
+                    // v0.3.1: 正圆裁剪 —— 取绘制区短边为直径，保证任意帧缓冲
+                    // 宽高比下圆表都不变形（此前按 letterbox 矩形 addOval，
+                    // 横向帧缓冲会被裁成椭圆，即真机反馈的“圆表变椭圆”）
+                    val path = Path()
+                    val d = minOf(g.width, g.height)
+                    path.addCircle(
+                        g.centerX, g.centerY, d / 2f,
+                        androidx.compose.ui.graphics.PathDirection.CW,
+                    )
                     clipPath(path) {
                         drawImage(
                             img,
