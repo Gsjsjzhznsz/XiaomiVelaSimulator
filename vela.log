@@ -1,182 +1,126 @@
-09-21 07:05:33.593 I/app: ===== VELA Simulator 日志会话开始 20260921-070533 =====
-09-21 07:05:33.604 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
-09-21 07:05:33.606 I/app: CrashGuard 已安装
-09-21 07:05:33.646 I/app: VelaApp.onCreate
-09-21 07:05:33.827 I/app: MainActivity.onCreate
-09-21 07:05:35.074 I/templates: 模板加载完成: 15 个
-09-21 07:05:38.401 I/runtime: 开始安装 QEMU 运行时 (mirror=auto)
-09-21 07:05:38.730 I/runtime: 软件源 tuna 不可用: HTTP 403
-09-21 07:05:38.746 I/runtime: 软件源 bfsu 不可用: HTTP 403
-09-21 07:05:38.839 I/runtime: 软件源 nju 不可用: HTTP 302
-09-21 07:05:39.426 I/runtime: 竞速选定软件源: sjtu（其余源已取消）
-09-21 07:05:40.696 I/runtime: 下载 dtc (83 KB)
-09-21 07:05:40.696 I/runtime: 下载 glib (2511 KB)
-09-21 07:05:40.696 I/runtime: 下载 alsa-lib (442 KB)
-09-21 07:05:40.696 I/runtime: 下载 qemu-system-arm-headless (3101 KB)
-09-21 07:05:41.525 I/runtime: 下载 jack2 (365 KB)
-09-21 07:05:41.788 I/runtime: 下载 libbz2 (25 KB)
-09-21 07:05:41.965 I/runtime: 下载 libcurl (1008 KB)
-09-21 07:05:41.988 I/runtime: 下载 libdw (209 KB)
-09-21 07:05:42.003 I/runtime: 下载 libiconv (549 KB)
-09-21 07:05:42.059 I/runtime: 下载 libgnutls (758 KB)
-09-21 07:05:42.089 I/runtime: 下载 libjpeg-turbo (442 KB)
-09-21 07:05:42.271 I/runtime: 下载 liblzo (67 KB)
-09-21 07:05:42.285 I/runtime: 下载 libnettle (396 KB)
-09-21 07:05:42.325 I/runtime: 下载 libnfs (182 KB)
-09-21 07:05:42.332 I/runtime: 下载 libpixman (154 KB)
-09-21 07:05:42.518 I/runtime: 下载 libgmp (320 KB)
-09-21 07:05:42.522 I/runtime: 下载 libpng (191 KB)
-09-21 07:05:42.535 I/runtime: 下载 libslirp (54 KB)
-09-21 07:05:42.536 I/runtime: 下载 libspice-server (265 KB)
-09-21 07:05:42.641 I/runtime: 下载 libusb (58 KB)
-09-21 07:05:42.718 I/runtime: 下载 libssh (228 KB)
-09-21 07:05:42.867 I/runtime: 下载 libusbredir (34 KB)
-09-21 07:05:42.879 I/runtime: 下载 ncurses (544 KB)
-09-21 07:05:42.890 I/runtime: 下载 pulseaudio (828 KB)
-09-21 07:05:42.963 I/runtime: 下载 qemu-common (20570 KB)
-09-21 07:05:42.975 I/runtime: 下载 resolv-conf (0 KB)
-09-21 07:05:43.133 I/runtime: 下载 zlib (61 KB)
-09-21 07:05:43.171 I/runtime: 下载 zstd (352 KB)
-09-21 07:05:43.252 I/runtime: 下载 libandroid-sysv-semaphore (3 KB)
-09-21 07:05:43.333 I/runtime: 下载 libandroid-shmem (7 KB)
-09-21 07:05:43.436 I/runtime: 下载 libandroid-support (10 KB)
-09-21 07:05:43.677 I/runtime: 下载 libffi (36 KB)
-09-21 07:05:43.734 I/runtime: 下载 pcre2 (938 KB)
-09-21 07:05:43.737 I/runtime: 下载 dbus (418 KB)
-09-21 07:05:44.028 I/runtime: 下载 python (4703 KB)
-09-21 07:05:44.113 I/runtime: 下载 libdb (485 KB)
-09-21 07:05:44.361 I/runtime: 下载 libandroid-posix-semaphore (3 KB)
-09-21 07:05:44.470 I/runtime: 下载 libexpat (95 KB)
-09-21 07:05:44.508 I/runtime: 下载 libsamplerate (950 KB)
-09-21 07:05:44.899 I/runtime: 下载 libopus (186 KB)
-09-21 07:05:44.943 I/runtime: 下载 libnghttp2 (93 KB)
-09-21 07:05:44.958 I/runtime: 下载 libnghttp3 (68 KB)
-09-21 07:05:45.252 I/runtime: 下载 libngtcp2 (169 KB)
-09-21 07:05:45.255 I/runtime: 下载 openssl (2420 KB)
-09-21 07:05:45.304 I/runtime: 下载 argp (20 KB)
-09-21 07:05:45.304 I/runtime: 下载 liblzma (190 KB)
-09-21 07:05:45.466 I/runtime: 下载 libssh2 (214 KB)
-09-21 07:05:45.474 I/runtime: 下载 libelf (121 KB)
-09-21 07:05:45.544 I/runtime: 下载 libc++ (326 KB)
-09-21 07:05:45.629 I/runtime: 下载 libtasn1 (98 KB)
-09-21 07:05:45.682 I/runtime: 下载 ca-certificates (102 KB)
-09-21 07:05:45.694 I/runtime: 下载 libunbound (378 KB)
-09-21 07:05:45.794 I/runtime: 下载 libidn2 (102 KB)
-09-21 07:05:45.935 I/runtime: 下载 libunistring (548 KB)
-09-21 07:05:46.037 I/runtime: 下载 p11-kit (457 KB)
-09-21 07:05:46.051 I/runtime: 下载 gst-plugins-base (1949 KB)
-09-21 07:05:46.047 I/runtime: 下载 gstreamer (1313 KB)
-09-21 07:05:46.126 I/runtime: 下载 liblz4 (82 KB)
-09-21 07:05:46.270 I/runtime: 下载 liborc (278 KB)
-09-21 07:05:46.454 I/runtime: 下载 libsasl (93 KB)
-09-21 07:05:46.456 I/runtime: 下载 libspice-protocol (18 KB)
-09-21 07:05:46.554 I/runtime: 下载 libandroid-stub (26 KB)
-09-21 07:05:46.672 I/runtime: 下载 libandroid-execinfo (14 KB)
-09-21 07:05:46.687 I/runtime: 下载 libandroid-glob (6 KB)
-09-21 07:05:46.693 I/runtime: 下载 libltdl (17 KB)
-09-21 07:05:46.801 I/runtime: 下载 libsndfile (218 KB)
-09-21 07:05:46.803 I/runtime: 下载 libsoxr (275 KB)
-09-21 07:05:46.805 I/runtime: 下载 libwebrtc-audio-processing (399 KB)
-09-21 07:05:46.811 I/runtime: 下载 libcap-ng (56 KB)
-09-21 07:05:46.902 I/runtime: 下载 gdbm (146 KB)
-09-21 07:05:46.974 I/runtime: 下载 libcrypt (8 KB)
-09-21 07:05:47.059 I/runtime: 下载 libsqlite (741 KB)
-09-21 07:05:47.062 I/runtime: 下载 ncurses-ui-libs (32 KB)
-09-21 07:05:47.219 I/runtime: 下载 speexdsp (36 KB)
-09-21 07:05:47.222 I/runtime: 下载 libx11 (1865 KB)
-09-21 07:05:47.312 I/runtime: 下载 json-c (50 KB)
-09-21 07:05:47.335 I/runtime: 下载 readline (286 KB)
-09-21 07:05:47.354 I/runtime: 下载 libevent (198 KB)
-09-21 07:05:47.412 I/runtime: 下载 graphene (187 KB)
-09-21 07:05:47.524 I/runtime: 下载 libogg (184 KB)
-09-21 07:05:47.538 I/runtime: 下载 libtheora (128 KB)
-09-21 07:05:47.582 I/runtime: 下载 libvorbis (255 KB)
-09-21 07:05:47.638 I/runtime: 下载 libxcb (892 KB)
-09-21 07:05:47.717 I/runtime: 下载 libxext (95 KB)
-09-21 07:05:47.743 I/runtime: 下载 libxi (138 KB)
-09-21 07:05:47.754 I/runtime: 下载 libxv (30 KB)
-09-21 07:05:47.995 I/runtime: 下载 libmp3lame (96 KB)
-09-21 07:05:48.001 I/runtime: 下载 libmpg123 (171 KB)
-09-21 07:05:48.001 I/runtime: 下载 xorgproto (243 KB)
-09-21 07:05:48.008 I/runtime: 下载 abseil-cpp (1169 KB)
-09-21 07:05:48.102 I/runtime: 下载 libflac (198 KB)
-09-21 07:05:48.209 I/runtime: 下载 libxdmcp (23 KB)
-09-21 07:05:48.242 I/runtime: 下载 xorg-util-macros (21 KB)
-09-21 07:05:48.254 I/runtime: 下载 libxau (8 KB)
-09-21 07:06:04.504 I/runtime: QEMU 运行时安装成功
-09-21 07:06:17.282 I/image: 镜像下载完成: openvela-mps2-an500-nsh
-09-21 07:06:22.611 I/session: 会话日志: session-20260921-070622.log
-09-21 07:06:22.611 I/session: 开始启动会话 template=smart-band-11 machine=mps2-an500
-09-21 07:06:22.617 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:46077,server,nowait -vnc 127.0.0.1::33285 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
-09-21 07:06:22.666 I/session: QEMU 退出 code=1
-09-21 07:55:57.911 I/app: ===== VELA Simulator 日志会话开始 20260921-075557 =====
-09-21 07:55:57.924 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
-09-21 07:55:57.926 I/app: CrashGuard 已安装
-09-21 07:55:57.991 I/app: VelaApp.onCreate
-09-21 07:55:58.262 I/app: MainActivity.onCreate
-09-21 07:55:59.477 I/templates: 模板加载完成: 15 个
-09-21 07:56:07.207 I/session: 会话日志: session-20260921-075607.log
-09-21 07:56:07.208 I/session: 开始启动会话 template=smart-band-11 machine=mps2-an500
-09-21 07:56:07.214 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:40175,server,nowait -vnc 127.0.0.1:30081 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
-09-21 07:57:07.154 I/image: 镜像下载完成: openvela-armv7a-nsh
-09-21 07:57:24.754 I/app: ===== VELA Simulator 日志会话开始 20260921-075724 =====
-09-21 07:57:24.761 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
-09-21 07:57:24.762 I/app: CrashGuard 已安装
-09-21 07:57:24.795 I/app: VelaApp.onCreate
-09-21 07:57:24.954 I/app: MainActivity.onCreate
-09-21 07:57:25.871 I/templates: 模板加载完成: 15 个
-09-21 07:57:29.225 I/session: 会话日志: session-20260921-075729.log
-09-21 07:57:29.225 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
-09-21 07:57:29.231 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-tablet-pci -kernel /data/user/0/com.vela.simulator/files/images/openvela-qemu-armv7a-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:40827,server,nowait -vnc 127.0.0.1:29461 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
-09-21 15:59:56.682 I/app: ===== VELA Simulator 日志会话开始 20260921-155956 =====
-09-21 15:59:56.688 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
-09-21 15:59:56.690 I/app: CrashGuard 已安装
-09-21 15:59:56.722 I/app: VelaApp.onCreate
-09-21 15:59:56.881 I/app: MainActivity.onCreate
-09-21 15:59:57.818 I/templates: 模板加载完成: 15 个
-09-21 16:00:02.441 I/session: 会话日志: session-20260921-160002.log
-09-21 16:00:02.443 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
-09-21 16:00:02.448 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-tablet-pci -kernel /data/user/0/com.vela.simulator/files/images/openvela-qemu-armv7a-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:44547,server -vnc 127.0.0.1:34817 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
-09-21 16:00:20.495 I/session: 停止会话
-09-21 16:00:20.497 I/session: 已结束全部虚拟机（1 台）
-09-21 16:00:20.511 I/session: QEMU 退出 code=0
-09-21 16:00:20.534 E/crash: 未捕获异常 thread=DefaultDispatcher-worker-1
-java.io.InterruptedIOException: read interrupted by close() on another thread
-	at libcore.io.Linux.readBytes(Native Method)
-	at libcore.io.Linux.read(Linux.java:190)
-	at libcore.io.ForwardingOs.read(ForwardingOs.java:613)
-	at libcore.io.BlockGuardOs.read(BlockGuardOs.java:325)
-	at libcore.io.ForwardingOs.read(ForwardingOs.java:613)
-	at libcore.io.IoBridge.read(IoBridge.java:604)
-	at java.io.FileInputStream.read(FileInputStream.java:353)
-	at java.io.BufferedInputStream.read1(BufferedInputStream.java:277)
-	at java.io.BufferedInputStream.read(BufferedInputStream.java:338)
-	at sun.nio.cs.StreamDecoder.readBytes(StreamDecoder.java:291)
-	at sun.nio.cs.StreamDecoder.implRead(StreamDecoder.java:355)
-	at sun.nio.cs.StreamDecoder.read(StreamDecoder.java:181)
-	at java.io.InputStreamReader.read(InputStreamReader.java:177)
-	at java.io.BufferedReader.fill(BufferedReader.java:172)
-	at java.io.BufferedReader.readLine(BufferedReader.java:337)
-	at java.io.BufferedReader.readLine(BufferedReader.java:403)
-	at kotlin.io.LinesSequence$iterator$1.hasNext(ReadWrite.kt:94)
-	at kotlin.io.TextStreamsKt.forEachLine(ReadWrite.kt:169)
-	at com.vela.simulator.engine.QemuSession$start$5.invokeSuspend(QemuSession.kt:140)
-	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
-	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
-	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:113)
-	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
-	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:589)
-	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:823)
-	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:720)
-	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:707)
-	Suppressed: kotlinx.coroutines.internal.DiagnosticCoroutineContextException: [StandaloneCoroutine{Cancelling}@1fc6d4, Dispatchers.IO]
-
-09-21 16:00:22.433 I/app: ===== VELA Simulator 日志会话开始 20260921-160022 =====
-09-21 16:00:22.440 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
-09-21 16:00:22.441 I/app: CrashGuard 已安装
-09-21 16:00:22.471 I/app: VelaApp.onCreate
-09-21 16:00:22.662 I/app: MainActivity.onCreate
-09-21 16:00:23.544 I/templates: 模板加载完成: 15 个
-09-21 16:00:32.645 I/session: 会话日志: session-20260921-160032.log
-09-21 16:00:32.647 I/session: 开始启动会话 template=smart-band-11 machine=mps2-an500
-09-21 16:00:32.658 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:46413,server -vnc 127.0.0.1:38197 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-21 21:19:48.584 I/app: ===== VELA Simulator 日志会话开始 20260921-211948 =====
+09-21 21:19:48.594 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-21 21:19:48.595 I/app: CrashGuard 已安装
+09-21 21:19:48.625 I/app: VelaApp.onCreate
+09-21 21:19:48.772 I/app: MainActivity.onCreate
+09-21 21:19:49.836 I/templates: 模板加载完成: 15 个
+09-21 21:19:50.700 I/runtime: 开始安装 QEMU 运行时 (mirror=auto)
+09-21 21:19:51.082 I/runtime: 软件源 tuna 不可用: HTTP 403
+09-21 21:19:51.103 I/runtime: 软件源 bfsu 不可用: HTTP 403
+09-21 21:19:51.120 I/runtime: 软件源 nju 不可用: HTTP 302
+09-21 21:19:52.088 I/runtime: 竞速选定软件源: sjtu（其余源已取消）
+09-21 21:19:53.264 I/runtime: 下载 qemu-system-arm-headless (3101 KB)
+09-21 21:19:53.264 I/runtime: 下载 alsa-lib (442 KB)
+09-21 21:19:53.265 I/runtime: 下载 dtc (83 KB)
+09-21 21:19:53.265 I/runtime: 下载 glib (2511 KB)
+09-21 21:19:53.873 I/runtime: 下载 jack2 (365 KB)
+09-21 21:19:54.176 I/runtime: 下载 libdw (209 KB)
+09-21 21:19:54.286 I/runtime: 下载 libcurl (1008 KB)
+09-21 21:19:54.297 I/runtime: 下载 libgmp (320 KB)
+09-21 21:19:54.411 I/runtime: 下载 libgnutls (758 KB)
+09-21 21:19:54.425 I/runtime: 下载 libbz2 (25 KB)
+09-21 21:19:54.448 I/runtime: 下载 libiconv (549 KB)
+09-21 21:19:54.495 I/runtime: 下载 libjpeg-turbo (442 KB)
+09-21 21:19:54.582 I/runtime: 下载 liblzo (67 KB)
+09-21 21:19:54.617 I/runtime: 下载 libnettle (396 KB)
+09-21 21:19:54.635 I/runtime: 下载 libnfs (182 KB)
+09-21 21:19:54.930 I/runtime: 下载 libpixman (154 KB)
+09-21 21:19:54.935 I/runtime: 下载 libpng (191 KB)
+09-21 21:19:54.941 I/runtime: 下载 libslirp (54 KB)
+09-21 21:19:54.943 I/runtime: 下载 libspice-server (265 KB)
+09-21 21:19:55.111 I/runtime: 下载 libssh (228 KB)
+09-21 21:19:55.133 I/runtime: 下载 libusb (58 KB)
+09-21 21:19:55.137 I/runtime: 下载 libusbredir (34 KB)
+09-21 21:19:55.148 I/runtime: 下载 ncurses (544 KB)
+09-21 21:19:55.303 I/runtime: 下载 pulseaudio (828 KB)
+09-21 21:19:55.339 I/runtime: 下载 qemu-common (20570 KB)
+09-21 21:19:55.346 I/runtime: 下载 resolv-conf (0 KB)
+09-21 21:19:55.352 I/runtime: 下载 zlib (61 KB)
+09-21 21:19:55.614 I/runtime: 下载 zstd (352 KB)
+09-21 21:19:55.620 I/runtime: 下载 libandroid-sysv-semaphore (3 KB)
+09-21 21:19:55.637 I/runtime: 下载 libandroid-shmem (7 KB)
+09-21 21:19:55.789 I/runtime: 下载 libandroid-support (10 KB)
+09-21 21:19:55.793 I/runtime: 下载 libffi (36 KB)
+09-21 21:19:55.801 I/runtime: 下载 pcre2 (938 KB)
+09-21 21:19:56.087 I/runtime: 下载 python (4703 KB)
+09-21 21:19:56.097 I/runtime: 下载 libandroid-posix-semaphore (3 KB)
+09-21 21:19:56.184 I/runtime: 下载 dbus (418 KB)
+09-21 21:19:56.607 I/runtime: 下载 libdb (485 KB)
+09-21 21:19:56.664 I/runtime: 下载 libsamplerate (950 KB)
+09-21 21:19:57.321 I/runtime: 下载 libopus (186 KB)
+09-21 21:19:57.841 I/runtime: 下载 libnghttp2 (93 KB)
+09-21 21:19:57.867 I/runtime: 下载 libngtcp2 (169 KB)
+09-21 21:19:57.897 I/runtime: 下载 libnghttp3 (68 KB)
+09-21 21:19:57.913 I/runtime: 下载 libexpat (95 KB)
+09-21 21:19:58.229 I/runtime: 下载 libssh2 (214 KB)
+09-21 21:19:58.229 I/runtime: 下载 openssl (2420 KB)
+09-21 21:19:58.238 I/runtime: 下载 liblzma (190 KB)
+09-21 21:19:58.239 I/runtime: 下载 argp (20 KB)
+09-21 21:19:58.498 I/runtime: 下载 libelf (121 KB)
+09-21 21:19:58.499 I/runtime: 下载 libc++ (326 KB)
+09-21 21:19:58.507 I/runtime: 下载 ca-certificates (102 KB)
+09-21 21:19:59.048 I/runtime: 下载 libidn2 (102 KB)
+09-21 21:19:59.111 I/runtime: 下载 libtasn1 (98 KB)
+09-21 21:19:59.133 I/runtime: 下载 libunistring (548 KB)
+09-21 21:19:59.153 I/runtime: 下载 libunbound (378 KB)
+09-21 21:19:59.173 I/runtime: 下载 p11-kit (457 KB)
+09-21 21:19:59.234 I/runtime: 下载 gst-plugins-base (1949 KB)
+09-21 21:19:59.516 I/runtime: 下载 gstreamer (1313 KB)
+09-21 21:19:59.523 I/runtime: 下载 liblz4 (82 KB)
+09-21 21:19:59.540 I/runtime: 下载 liborc (278 KB)
+09-21 21:19:59.844 I/runtime: 下载 libsasl (93 KB)
+09-21 21:19:59.855 I/runtime: 下载 libspice-protocol (18 KB)
+09-21 21:20:00.087 I/runtime: 下载 libandroid-execinfo (14 KB)
+09-21 21:20:00.127 I/runtime: 下载 libandroid-glob (6 KB)
+09-21 21:20:00.135 I/runtime: 下载 libandroid-stub (26 KB)
+09-21 21:20:00.139 I/runtime: 下载 libltdl (17 KB)
+09-21 21:20:00.177 I/runtime: 下载 libsndfile (218 KB)
+09-21 21:20:00.260 I/runtime: 下载 libsoxr (275 KB)
+09-21 21:20:00.263 I/runtime: 下载 libwebrtc-audio-processing (399 KB)
+09-21 21:20:00.267 I/runtime: 下载 speexdsp (36 KB)
+09-21 21:20:00.356 I/runtime: 下载 gdbm (146 KB)
+09-21 21:20:00.428 I/runtime: 下载 libcap-ng (56 KB)
+09-21 21:20:00.457 I/runtime: 下载 libcrypt (8 KB)
+09-21 21:20:00.491 I/runtime: 下载 libsqlite (741 KB)
+09-21 21:20:00.510 I/runtime: 下载 ncurses-ui-libs (32 KB)
+09-21 21:20:00.591 I/runtime: 下载 readline (286 KB)
+09-21 21:20:00.607 I/runtime: 下载 json-c (50 KB)
+09-21 21:20:00.646 I/runtime: 下载 libx11 (1865 KB)
+09-21 21:20:00.667 I/runtime: 下载 libevent (198 KB)
+09-21 21:20:00.775 I/runtime: 下载 libogg (184 KB)
+09-21 21:20:00.786 I/runtime: 下载 graphene (187 KB)
+09-21 21:20:00.862 I/runtime: 下载 libtheora (128 KB)
+09-21 21:20:01.101 I/runtime: 下载 libvorbis (255 KB)
+09-21 21:20:01.115 I/runtime: 下载 libxcb (892 KB)
+09-21 21:20:01.124 I/runtime: 下载 libxext (95 KB)
+09-21 21:20:01.137 I/runtime: 下载 libxi (138 KB)
+09-21 21:20:01.217 I/runtime: 下载 libxv (30 KB)
+09-21 21:20:01.294 I/runtime: 下载 libflac (198 KB)
+09-21 21:20:01.350 I/runtime: 下载 libmpg123 (171 KB)
+09-21 21:20:01.367 I/runtime: 下载 libmp3lame (96 KB)
+09-21 21:20:01.372 I/runtime: 下载 abseil-cpp (1169 KB)
+09-21 21:20:01.453 I/runtime: 下载 xorgproto (243 KB)
+09-21 21:20:01.554 I/runtime: 下载 libxau (8 KB)
+09-21 21:20:01.557 I/runtime: 下载 libxdmcp (23 KB)
+09-21 21:20:01.623 I/runtime: 下载 xorg-util-macros (21 KB)
+09-21 21:20:32.181 I/runtime: QEMU 运行时安装成功
+09-21 21:21:25.663 I/image: 镜像下载完成: openvela-armv7a-full
+09-21 21:21:27.387 I/session: 会话日志: session-20260921-212127.log
+09-21 21:21:27.387 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-21 21:21:27.391 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device -device virtio-tablet-device -nic none -kernel /data/user/0/com.vela.simulator/files/images/openvela-qemu-armv7a-full.elf -display none -monitor none -serial tcp:127.0.0.1:43827,server -vnc 127.0.0.1:35995 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-21 21:22:02.542 I/session: 停止会话
+09-21 21:22:02.543 I/session: 已结束全部虚拟机（1 台）
+09-21 21:22:02.589 I/session: QEMU 退出 code=0
+09-21 21:22:09.536 I/image: 镜像下载完成: openvela-mps2-an500-nsh
+09-21 21:22:11.646 I/session: 会话日志: session-20260921-212211.log
+09-21 21:22:11.647 I/session: 开始启动会话 template=smart-band-11 machine=mps2-an500
+09-21 21:22:11.649 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:43577,server -vnc 127.0.0.1:28103 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-21 21:22:53.932 I/app: ===== VELA Simulator 日志会话开始 20260921-212253 =====
+09-21 21:22:53.939 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-21 21:22:53.940 I/app: CrashGuard 已安装
+09-21 21:22:53.968 I/app: VelaApp.onCreate
+09-21 21:22:54.121 I/app: MainActivity.onCreate
+09-21 21:22:54.966 I/templates: 模板加载完成: 15 个
+09-21 21:23:44.112 I/session: 会话日志: session-20260921-212344.log
+09-21 21:23:44.115 I/session: 开始启动会话 template=watch-s5 machine=virt
+09-21 21:23:44.130 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 2 -m 512M -device virtio-gpu-device -device virtio-tablet-device -nic none -kernel /data/user/0/com.vela.simulator/files/images/openvela-qemu-armv7a-full.elf -display none -monitor none -serial tcp:127.0.0.1:40985,server -vnc 127.0.0.1:29757 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu

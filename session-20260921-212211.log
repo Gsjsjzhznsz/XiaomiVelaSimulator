@@ -1,0 +1,15 @@
+===== 会话: Xiaomi Smart Band 11 =====
+[qemu-cmd] /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:43577,server -vnc 127.0.0.1:28103 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+[qemu] qemu-system-arm: -serial tcp:127.0.0.1:43577,server: info: QEMU waiting for connection on: disconnected:tcp:127.0.0.1:43577,server=on
+[serial] 已连接串口 tcp:43577
+nx_start: Entry
+uart_register: Registering /dev/console
+uart_register: Registering /dev/ttyS0
+work_start_highpri: Starting high-priority kernel worker thread(s)
+nxtask_activate: hpwork pid=1,TCB=0x60005be8
+lib_cxx_initialize: _sinit: 0x5d344 _einit: 0x5d344
+nx_start_application: Starting init thread
+task_spawn: name=nsh_main entry=0x15951 file_actions=0 attr=0x60005550 argv=0x6000556c
+nxtask_activate: nsh_main pid=2,TCB=0x60005cd0
+NuttShell (NSH)
+nsh> [Knx_start: CPU0: Beginning Idle Loop
