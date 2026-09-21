@@ -1,0 +1,35 @@
+===== CRASH 20260921-155956 =====
+time=09-21 16:00:20.528
+thread=DefaultDispatcher-worker-1
+device=Xiaomi 22041216C android=15 sdk=35
+
+java.io.InterruptedIOException: read interrupted by close() on another thread
+	at libcore.io.Linux.readBytes(Native Method)
+	at libcore.io.Linux.read(Linux.java:190)
+	at libcore.io.ForwardingOs.read(ForwardingOs.java:613)
+	at libcore.io.BlockGuardOs.read(BlockGuardOs.java:325)
+	at libcore.io.ForwardingOs.read(ForwardingOs.java:613)
+	at libcore.io.IoBridge.read(IoBridge.java:604)
+	at java.io.FileInputStream.read(FileInputStream.java:353)
+	at java.io.BufferedInputStream.read1(BufferedInputStream.java:277)
+	at java.io.BufferedInputStream.read(BufferedInputStream.java:338)
+	at sun.nio.cs.StreamDecoder.readBytes(StreamDecoder.java:291)
+	at sun.nio.cs.StreamDecoder.implRead(StreamDecoder.java:355)
+	at sun.nio.cs.StreamDecoder.read(StreamDecoder.java:181)
+	at java.io.InputStreamReader.read(InputStreamReader.java:177)
+	at java.io.BufferedReader.fill(BufferedReader.java:172)
+	at java.io.BufferedReader.readLine(BufferedReader.java:337)
+	at java.io.BufferedReader.readLine(BufferedReader.java:403)
+	at kotlin.io.LinesSequence$iterator$1.hasNext(ReadWrite.kt:94)
+	at kotlin.io.TextStreamsKt.forEachLine(ReadWrite.kt:169)
+	at com.vela.simulator.engine.QemuSession$start$5.invokeSuspend(QemuSession.kt:140)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:113)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:589)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:823)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:720)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:707)
+	Suppressed: kotlinx.coroutines.internal.DiagnosticCoroutineContextException: [StandaloneCoroutine{Cancelling}@1fc6d4, Dispatchers.IO]
+

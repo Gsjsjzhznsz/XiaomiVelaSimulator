@@ -128,3 +128,55 @@
 09-21 07:57:29.225 I/session: 会话日志: session-20260921-075729.log
 09-21 07:57:29.225 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
 09-21 07:57:29.231 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-tablet-pci -kernel /data/user/0/com.vela.simulator/files/images/openvela-qemu-armv7a-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:40827,server,nowait -vnc 127.0.0.1:29461 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-21 15:59:56.682 I/app: ===== VELA Simulator 日志会话开始 20260921-155956 =====
+09-21 15:59:56.688 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-21 15:59:56.690 I/app: CrashGuard 已安装
+09-21 15:59:56.722 I/app: VelaApp.onCreate
+09-21 15:59:56.881 I/app: MainActivity.onCreate
+09-21 15:59:57.818 I/templates: 模板加载完成: 15 个
+09-21 16:00:02.441 I/session: 会话日志: session-20260921-160002.log
+09-21 16:00:02.443 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-21 16:00:02.448 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-tablet-pci -kernel /data/user/0/com.vela.simulator/files/images/openvela-qemu-armv7a-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:44547,server -vnc 127.0.0.1:34817 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-21 16:00:20.495 I/session: 停止会话
+09-21 16:00:20.497 I/session: 已结束全部虚拟机（1 台）
+09-21 16:00:20.511 I/session: QEMU 退出 code=0
+09-21 16:00:20.534 E/crash: 未捕获异常 thread=DefaultDispatcher-worker-1
+java.io.InterruptedIOException: read interrupted by close() on another thread
+	at libcore.io.Linux.readBytes(Native Method)
+	at libcore.io.Linux.read(Linux.java:190)
+	at libcore.io.ForwardingOs.read(ForwardingOs.java:613)
+	at libcore.io.BlockGuardOs.read(BlockGuardOs.java:325)
+	at libcore.io.ForwardingOs.read(ForwardingOs.java:613)
+	at libcore.io.IoBridge.read(IoBridge.java:604)
+	at java.io.FileInputStream.read(FileInputStream.java:353)
+	at java.io.BufferedInputStream.read1(BufferedInputStream.java:277)
+	at java.io.BufferedInputStream.read(BufferedInputStream.java:338)
+	at sun.nio.cs.StreamDecoder.readBytes(StreamDecoder.java:291)
+	at sun.nio.cs.StreamDecoder.implRead(StreamDecoder.java:355)
+	at sun.nio.cs.StreamDecoder.read(StreamDecoder.java:181)
+	at java.io.InputStreamReader.read(InputStreamReader.java:177)
+	at java.io.BufferedReader.fill(BufferedReader.java:172)
+	at java.io.BufferedReader.readLine(BufferedReader.java:337)
+	at java.io.BufferedReader.readLine(BufferedReader.java:403)
+	at kotlin.io.LinesSequence$iterator$1.hasNext(ReadWrite.kt:94)
+	at kotlin.io.TextStreamsKt.forEachLine(ReadWrite.kt:169)
+	at com.vela.simulator.engine.QemuSession$start$5.invokeSuspend(QemuSession.kt:140)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:113)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:589)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:823)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:720)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:707)
+	Suppressed: kotlinx.coroutines.internal.DiagnosticCoroutineContextException: [StandaloneCoroutine{Cancelling}@1fc6d4, Dispatchers.IO]
+
+09-21 16:00:22.433 I/app: ===== VELA Simulator 日志会话开始 20260921-160022 =====
+09-21 16:00:22.440 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-21 16:00:22.441 I/app: CrashGuard 已安装
+09-21 16:00:22.471 I/app: VelaApp.onCreate
+09-21 16:00:22.662 I/app: MainActivity.onCreate
+09-21 16:00:23.544 I/templates: 模板加载完成: 15 个
+09-21 16:00:32.645 I/session: 会话日志: session-20260921-160032.log
+09-21 16:00:32.647 I/session: 开始启动会话 template=smart-band-11 machine=mps2-an500
+09-21 16:00:32.658 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:46413,server -vnc 127.0.0.1:38197 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
