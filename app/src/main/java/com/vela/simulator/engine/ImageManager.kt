@@ -37,6 +37,25 @@ class ImageManager(private val context: Context) {
             "https://ghfast.top/",
             "https://ghproxy.net/",
         )
+
+        /** 内核最小合理体积：内置 openvela 固件均 ≥ 4MB，低于此值视为错误页/残缺文件（v0.2.7） */
+        const val MIN_KERNEL_BYTES: Long = 1024L * 1024L
+
+        /** 文件前 4 字节是否为 ELF 魔数 0x7F 'E' 'L' 'F'（v0.2.7，静态：QemuSession 启动前校验也用） */
+        fun isElfFile(f: File): Boolean = runCatching {
+            if (!f.exists() || f.length() < 4) return@runCatching false
+            f.inputStream().use { ins ->
+                val head = ByteArray(4)
+                var off = 0
+                while (off < 4) {
+                    val n = ins.read(head, off, 4 - off)
+                    if (n < 0) return@runCatching false
+                    off += n
+                }
+                head[0] == 0x7F.toByte() && head[1] == 'E'.code.toByte()
+                    && head[2] == 'L'.code.toByte() && head[3] == 'F'.code.toByte()
+            }
+        }.getOrDefault(false)
     }
 
     val imagesDir: File get() = File(context.filesDir, "images").apply { mkdirs() }
@@ -77,7 +96,18 @@ class ImageManager(private val context: Context) {
 
     fun kernelFile(name: String): File = File(imagesDir, name)
 
-    fun isKernelReady(name: String): Boolean = kernelFile(name).exists() && kernelFile(name).length() > 0
+    /**
+     * 就绪判定（v0.2.7 加固）：文件存在 + ≥ 1MB + ELF 魔数。
+     * 修复：此前仅 length>0 即判就绪，代理错误页/历史版本残缺文件
+     * 被误判就绪 → QEMU 加载坏内核 → 无法启动/无画面。
+     */
+    fun isKernelReady(name: String): Boolean {
+        val f = kernelFile(name)
+        return f.exists() && f.length() >= MIN_KERNEL_BYTES && isElfFile(f)
+    }
+
+    /** 本地内核文件实际大小（字节）；不存在返回 0。供 UI 显示真实体积 */
+    fun kernelSize(name: String): Long = kernelFile(name).takeIf { it.exists() }?.length() ?: 0L
 
     fun verifyKernel(name: String, sha256: String): Boolean {
         val f = kernelFile(name)
@@ -102,13 +132,16 @@ class ImageManager(private val context: Context) {
                 }
             }.joinAll()
         }
-        // 校验与就绪提示在全部下载完成后统一执行
+        // 校验与就绪提示在全部下载完成后统一执行；SHA 不符立即删除坏文件（v0.2.7）
         for (f in entry.files) {
             if (f.sha256.isNotEmpty()) {
                 progress?.onStage("SHA256 校验 ${f.out}")
                 val dest = kernelFile(f.out)
                 val actual = QemuRuntime(context).sha256(dest)
-                check(actual.equals(f.sha256, ignoreCase = true)) { "${f.out} SHA256 校验失败" }
+                if (!actual.equals(f.sha256, ignoreCase = true)) {
+                    runCatching { dest.delete() }
+                    throw IOException("${f.out} SHA256 校验失败（已删除损坏文件，可重新下载）")
+                }
             }
         }
         progress?.onStage("镜像就绪")
@@ -116,7 +149,8 @@ class ImageManager(private val context: Context) {
 
     /**
      * 单文件下载：直连 → 逐个反代重试，命中线路内部分段并行。
-     * 判定标准：HTTP 200 且接收字节数 > 0（部分反代对失效资源返回 200 空体）。
+     * 判定标准（v0.2.7 加固）：接收字节数 ≥ 清单声明体积（清单 size=0 时退化为 >0）。
+     * 修复：此前仅 bytes>0 即算成功，部分代理对失效资源返回 200+1KB 错误页会被落盘。
      */
     private suspend fun downloadWithFallback(
         url: String,
@@ -130,8 +164,8 @@ class ImageManager(private val context: Context) {
             try {
                 progress?.onLog("下载 $label${if (proxy.isEmpty()) "（直连）" else "（代理 ${proxy.removePrefix("https://").trimEnd('/')})"}")
                 val bytes = httpGet(target, dest, label, expectedSize)
-                if (bytes > 0) return@withContext
-                error("响应体为空")
+                if (bytes > 0 && (expectedSize <= 0 || bytes >= expectedSize)) return@withContext
+                error("响应体积不符: got ${bytes}B want ${expectedSize}B（可能为错误页/残缺响应）")
             } catch (e: Exception) {
                 lastError = e
                 runCatching { dest.delete() }
@@ -145,7 +179,8 @@ class ImageManager(private val context: Context) {
     /** 流式/分段下载到 dest，返回接收的字节数（>1.5MB 自动 4 段并行） */
     private suspend fun httpGet(url: String, dest: File, label: String, expectedSize: Long): Long = withContext(Dispatchers.IO) {
         com.vela.simulator.util.HttpDownloader.download(http, url, dest, expectedSize) { read ->
-            progress?.onFileProgress(label, read, -1L)
+            // v0.2.7：total 传清单声明体积（此前恒传 -1，UI 无法显示百分比与总量）
+            progress?.onFileProgress(label, read, expectedSize)
         }
     }
 

@@ -58,7 +58,9 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
     val t = remember(id) { vm.templateById(id) }
     if (t == null) { LaunchedEffect(id) { onBack() }; return }
 
-    val session = vm.sessionState.collectAsState().value
+    // v0.2.7 多实例：sessionState 变为 Map<templateId, QemuSession>，按当前页面 id 取本机会话
+    val sessions = vm.sessionState.collectAsState().value
+    val session = sessions[id]
     val state = session?.state?.collectAsState()?.value ?: QemuSession.State.IDLE
     val logs = session?.logLines?.collectAsState()?.value ?: emptyList()
     val serialConnected = session?.console?.isConnected == true
@@ -113,7 +115,7 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
             IconButton(onClick = { vm.startSession(t) }, enabled = state != QemuSession.State.RUNNING && state != QemuSession.State.BOOTING) {
                 Icon(Icons.Filled.Refresh, "重启")
             }
-            IconButton(onClick = { vm.stopSession() }, enabled = state == QemuSession.State.RUNNING || state == QemuSession.State.BOOTING) {
+            IconButton(onClick = { vm.stopSession(id) }, enabled = state == QemuSession.State.RUNNING || state == QemuSession.State.BOOTING) {
                 Icon(Icons.Filled.Stop, "停止", tint = if (state == QemuSession.State.RUNNING) VelaRed else Color(0xFF66666F))
             }
         }

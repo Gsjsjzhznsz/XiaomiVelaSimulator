@@ -67,7 +67,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             override fun onFileProgress(name: String, downloaded: Long, total: Long) {
                 _runtimeState.value = _runtimeState.value.copy(
-                    fileProgress = if (total > 0) "$name  ${(downloaded / 1024 / 1024)}MB / ${total / 1024 / 1024}MB" else "$name  ${downloaded / 1024}KB"
+                    fileProgress = if (total > 0) "$name  ${downloaded * 100 / total}%  (${fmtSize(downloaded)} / ${fmtSize(total)})" else "$name  ${fmtSize(downloaded)}"
                 )
             }
             override fun onLog(line: String) { FileLogger.i("runtime", line) }
@@ -125,8 +125,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _imageState.value = _imageState.value.copy(
                     fileProgress = if (total > 0) {
                         val pct = downloaded * 100 / total
-                        "$name  ${pct}%  (${downloaded / 1024}KB)"
-                    } else "$name  ${downloaded / 1024}KB"
+                        "$name  ${pct}%  (${fmtSize(downloaded)} / ${fmtSize(total)})"
+                    } else "$name  ${fmtSize(downloaded)}"
                 )
             }
             override fun onLog(line: String) {}
@@ -151,19 +151,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- 会话 ----
-    private var session: QemuSession? = null
-    private val _sessionState = MutableStateFlow<QemuSession?>(null)
-    val sessionState: StateFlow<QemuSession?> = _sessionState
+    /** 体积格式化：MB 级一位小数，KB 级整数 */
+    private fun fmtSize(bytes: Long): String =
+        if (bytes >= 1024L * 1024L) String.format(java.util.Locale.US, "%.1fMB", bytes / 1024.0 / 1024.0)
+        else "${bytes / 1024}KB"
+
+    // ---- 会话（v0.2.7 多实例：templateId → session，支持多台虚拟机同时运行） ----
+    private val sessions = LinkedHashMap<String, QemuSession>()
+    private val _sessionState = MutableStateFlow<Map<String, QemuSession>>(emptyMap())
+    val sessionState: StateFlow<Map<String, QemuSession>> = _sessionState
 
     fun startSession(t: DeviceTemplate) {
-        val cur = session?.state?.value
-        if (cur == QemuSession.State.RUNNING || cur == QemuSession.State.BOOTING) return
-        session?.release()
+        // 同一模板已在运行/启动中：直接复用现有会话（不重复启动）
+        sessions[t.id]?.let { cur ->
+            val st = cur.state.value
+            if (st == QemuSession.State.RUNNING || st == QemuSession.State.BOOTING) return
+            // 非运行态旧会话（已退出/失败）：释放后重建
+            cur.release()
+            sessions.remove(t.id)
+            _sessionState.value = sessions.toMap()
+        }
+        // 多开：不再销毁其他模板的会话（v0.2.6 及之前会 session?.release() 单槽串行）
         val s = QemuSession(runtime, t, images.imagesDir)
         s.console.onText = { text -> s.appendLogRaw(text) }
-        session = s
-        _sessionState.value = s
+        sessions[t.id] = s
+        _sessionState.value = sessions.toMap()
         viewModelScope.launch(Dispatchers.IO) {
             // 任何启动异常都必须留在会话内，绝不能带崩整个应用
             runCatching { s.start() }
@@ -174,11 +186,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun stopSession() {
-        session?.stop()
+    fun stopSession(templateId: String) {
+        sessions[templateId]?.stop()
     }
 
-    fun currentSession(): QemuSession? = session
+    /** 结束全部运行中的虚拟机 */
+    fun stopAllSessions() {
+        sessions.values.forEach { it.stop() }
+        FileLogger.i("session", "已结束全部虚拟机（${sessions.size} 台）")
+    }
+
+    fun runningCount(): Int = sessions.values.count {
+        it.state.value == QemuSession.State.RUNNING || it.state.value == QemuSession.State.BOOTING
+    }
+
+    fun currentSession(templateId: String): QemuSession? = sessions[templateId]
 
     // ---- 快应用 / 表盘 / 截图 ----
     data class ImportUiState<T>(
@@ -223,7 +245,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }.getOrNull()
 
     override fun onCleared() {
-        session?.release()
+        sessions.values.forEach { it.release() }
+        sessions.clear()
         super.onCleared()
     }
 }

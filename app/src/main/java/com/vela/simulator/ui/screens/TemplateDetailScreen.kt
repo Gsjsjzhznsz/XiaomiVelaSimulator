@@ -80,7 +80,9 @@ fun TemplateDetailScreen(
     // ② kernel 文件先落盘但 entry 其余文件仍在下载时，不提前宣布“已就绪”
     val busyHere = imageState.busy && imageState.imageId == (entry?.id ?: "")
     val imageError = imageState.error?.takeIf { imageState.imageId == (entry?.id ?: "") }
+    // v0.2.7：imageId 变化（下载完成/失败）都会刷新就绪判定（现在含 ELF 魔数 + 最小体积校验）
     val kernelReady = remember(imageState, busyHere) { !busyHere && vm.images.isKernelReady(t.qemu.kernel) }
+    val kernelSizeMb = remember(imageState, busyHere) { vm.images.kernelSize(t.qemu.kernel) / 1024.0 / 1024.0 }
 
     // 自定义导入
     var importTarget by remember { mutableStateOf<String?>(null) }
@@ -133,7 +135,10 @@ fun TemplateDetailScreen(
                             Text(
                                 when {
                                     busyHere -> "正在下载镜像…"
-                                    kernelReady -> "镜像已就绪 · ${t.qemu.kernel}"
+                                    // v0.2.7：就绪态显示真实体积，取代此前无总量的累计 KB 计数
+                                    kernelReady -> "镜像已就绪 · ${String.format(java.util.Locale.US, "%.1f", kernelSizeMb)}MB"
+                                    vm.images.kernelSize(t.qemu.kernel) > 0L ->
+                                        "镜像文件异常（${String.format(java.util.Locale.US, "%.1f", kernelSizeMb)}MB，非有效内核），请重新下载"
                                     else -> (entry?.desc ?: "未找到清单条目，可导入本地镜像")
                                 },
                                 style = MaterialTheme.typography.bodySmall,
@@ -157,6 +162,12 @@ fun TemplateDetailScreen(
                         if (!kernelReady && entry != null) {
                             Button(onClick = { vm.downloadImage(entry) }, enabled = !busyHere) {
                                 Text(if (busyHere) "下载中…" else "自动下载")
+                            }
+                        }
+                        // v0.2.7：就绪后仍提供重新下载入口（覆盖文件损坏/需换源场景）
+                        if (kernelReady && entry != null) {
+                            OutlinedButton(onClick = { vm.downloadImage(entry) }, enabled = !busyHere) {
+                                Text("重新下载")
                             }
                         }
                         OutlinedButton(onClick = {

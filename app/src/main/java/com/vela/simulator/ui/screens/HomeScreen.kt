@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,12 +20,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.vela.simulator.device.DeviceTemplate
+import com.vela.simulator.engine.QemuSession
 import com.vela.simulator.ui.MainViewModel
 import com.vela.simulator.ui.components.PageScaffold
 import com.vela.simulator.ui.components.WatchPreview
@@ -61,6 +66,12 @@ fun HomeScreen(
 ) {
     val templates by vm.templateList.collectAsState()
     val runtime by vm.runtimeState.collectAsState()
+    // v0.2.7 多实例：运行中/启动中的虚拟机集合，驱动卡片角标与“结束全部”
+    val sessions by vm.sessionState.collectAsState()
+    val runningIds = sessions.values
+        .filter { it.state.collectAsState().value.let { s -> s == QemuSession.State.RUNNING || s == QemuSession.State.BOOTING } }
+        .map { it.template.id }
+        .toSet()
 
     // 上次异常退出提示（崩溃 tombstone）
     var lastCrash by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -158,6 +169,14 @@ fun HomeScreen(
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("设备模板（${templates.size}）", style = MaterialTheme.typography.titleMedium)
+            // v0.2.7：存在运行中虚拟机时提供一键全部结束
+            if (runningIds.isNotEmpty()) {
+                TextButton(onClick = { vm.stopAllSessions() }) {
+                    Icon(Icons.Filled.Stop, null, tint = VelaRed, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("结束全部（${runningIds.size}）", color = VelaRed, style = MaterialTheme.typography.labelLarge)
+                }
+            }
         }
 
         LazyVerticalGrid(
@@ -167,7 +186,7 @@ fun HomeScreen(
             modifier = Modifier.weight(1f),
         ) {
             items(templates, key = { it.first.id + it.second.fileName }) { (t, meta) ->
-                TemplateCard(t, meta.source) { onSelect(t.id) }
+                TemplateCard(t, meta.source, running = t.id in runningIds) { onSelect(t.id) }
             }
             item {
                 NewTemplateCard { onSelect("__new__") }
@@ -182,7 +201,7 @@ fun HomeScreen(
 }
 
 @Composable
-fun TemplateCard(t: DeviceTemplate, source: String, onClick: () -> Unit) {
+fun TemplateCard(t: DeviceTemplate, source: String, running: Boolean = false, onClick: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(containerColor = VelaSurface),
         shape = RoundedCornerShape(20.dp),
@@ -194,6 +213,20 @@ fun TemplateCard(t: DeviceTemplate, source: String, onClick: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 WatchPreview(t, Modifier.size(96.dp), showTime = false)
+                // v0.2.7：运行中角标（左上角绿色指示）
+                if (running) {
+                    Row(
+                        Modifier.align(Alignment.TopStart)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x3320C058))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(VelaGreen))
+                        Spacer(Modifier.width(4.dp))
+                        Text("运行中", color = VelaGreen, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
             Text(t.name, style = MaterialTheme.typography.labelLarge, maxLines = 1)
             Text(

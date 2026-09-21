@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 /**
  * 一次 QEMU 仿真会话：进程生命周期 + 串口控制台 + VNC 客户端。
@@ -84,6 +85,22 @@ class QemuSession(
         logLines.value = listOf("[vela] 启动 ${template.name}")
         FileLogger.beginSessionLog(template.name)
         FileLogger.i("session", "开始启动会话 template=${template.id} machine=${template.qemu.machine}")
+
+        // v0.2.7：启动前内核健康前置校验 —— 残缺/错误页内核（无 ELF 魔数或体积过小）
+        // 不再交给 QEMU（此前会直接启动失败/黑屏，用户无法定位原因）
+        val kernel = File(imagesDir, template.qemu.kernel)
+        if (!kernel.exists()) {
+            failWith("系统镜像未下载（${template.qemu.kernel}），请到设备详情页下载", null)
+            return
+        }
+        if (kernel.length() < ImageManager.MIN_KERNEL_BYTES || !ImageManager.isElfFile(kernel)) {
+            val mb = String.format(java.util.Locale.US, "%.1f", kernel.length() / 1024.0 / 1024.0)
+            FileLogger.w("session", "内核文件异常: ${kernel.name} ${kernel.length()}B, 删除并要求重新下载")
+            runCatching { kernel.delete() }
+            failWith("系统镜像损坏（仅 ${mb}MB，非有效 ELF 内核），已清除，请到设备详情页重新下载", null)
+            return
+        }
+
         val plan: QemuArgsBuilder.Plan? = withContext(Dispatchers.IO) {
             runCatching {
                 QemuArgsBuilder.build(template, imagesDir, runtime.prefixUsr, runtime.qemuBinary)
@@ -181,7 +198,21 @@ class QemuSession(
     fun stop() {
         FileLogger.i("session", "停止会话")
         _state.value = State.IDLE
-        runCatching { process?.destroy() }
+        val p = process
+        if (p != null) {
+            runCatching { p.destroy() }
+            // v0.2.7：SIGTERM 未生效时后台线程升级强杀（不阻塞 UI 线程），
+            // 修复此前偶发的“点了停止但 QEMU 进程仍在后台运行”
+            Thread {
+                runCatching {
+                    if (!p.waitFor(3, TimeUnit.SECONDS)) {
+                        FileLogger.w("session", "进程未响应 SIGTERM，强制结束 (pid=${p.hashCode()})")
+                        p.destroyForcibly()
+                        p.waitFor(2, TimeUnit.SECONDS)
+                    }
+                }
+            }.apply { isDaemon = true; name = "qemu-kill" }.start()
+        }
         process = null
         console.close()
         runCatching { vnc?.close() }
