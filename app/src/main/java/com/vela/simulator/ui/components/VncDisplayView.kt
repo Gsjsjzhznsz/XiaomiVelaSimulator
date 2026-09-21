@@ -124,12 +124,13 @@ fun VncDisplayView(
                     // v0.3.1: 正圆裁剪 —— 取绘制区短边为直径，保证任意帧缓冲
                     // 宽高比下圆表都不变形（此前按 letterbox 矩形 addOval，
                     // 横向帧缓冲会被裁成椭圆，即真机反馈的“圆表变椭圆”）
-                    val path = Path()
+                    // 圆用等边椭圆表达，避免低版本 Compose 缺 addCircle/PathDirection
                     val d = minOf(g.width, g.height)
-                    path.addCircle(
-                        g.centerX, g.centerY, d / 2f,
-                        androidx.compose.ui.graphics.PathDirection.CW,
-                    )
+                    val cx = (g.left + g.right) / 2f
+                    val cy = (g.top + g.bottom) / 2f
+                    val path = Path().apply {
+                        addOval(Rect(cx - d / 2f, cy - d / 2f, cx + d / 2f, cy + d / 2f))
+                    }
                     clipPath(path) {
                         drawImage(
                             img,
