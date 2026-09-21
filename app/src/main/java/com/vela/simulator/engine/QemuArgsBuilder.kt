@@ -12,8 +12,14 @@ import java.net.ServerSocket
  *  - mps2-an500/521: Cortex-M7/M33 手环类 MCU，内存固定（不可用 -m）
  *
  * 输出通道：
- *  - 串口 nsh  : -serial tcp:127.0.0.1:<port>,server,nowait（App 作为客户端连接）
+ *  - 串口 nsh  : -serial tcp:127.0.0.1:<port>,server（App 作为客户端连接）
  *  - VNC 画面  : -vnc 127.0.0.1:<display>（可选，画面视图，实际监听 display+5900）
+ *
+ * v0.2.7 修复（无画面/无输出根因，实测自用户日志 session-20260921-075607）：
+ *  原 -serial ...,server,nowait 模式下，客户端连接前的串口输出直接丢失。
+ *  Cortex-M（mps2）引导极快（毫秒级），nx_start 全部输出在 App 首次连接（500ms 后）
+ *  之前就已发出 → 串口看起来“零输出/没反应”。去掉 nowait 后 QEMU 会阻塞等待
+ *  串口客户端就绪才开始执行 guest，启动输出零丢失（对 Cortex-A virt 同样受益）。
  *
  * v0.2.6 修复（无法启动根因，实测自用户日志 session-20260921-070622）：
  *  Termux 版 QEMU 的 -vnc 解析缺陷：无论单/双冒号，冒号后的数字都被当作 display 号，
@@ -78,8 +84,10 @@ object QemuArgsBuilder {
         // 无图形界面，显示走 VNC
         args += listOf("-display", "none", "-monitor", "none")
 
-        // 串口 → 本地 TCP（nsh 控制台）
-        args += listOf("-serial", "tcp:127.0.0.1:$serialPort,server,nowait")
+        // 串口 → 本地 TCP（nsh 控制台）。
+        // v0.2.7：去掉 nowait —— QEMU 阻塞等待串口客户端连接后才开始跑 guest，
+        // 防 Cortex-M 毫秒级引导的 nx_start 输出在 App 连接前全部丢失
+        args += listOf("-serial", "tcp:127.0.0.1:$serialPort,server")
 
         // VNC 帧缓冲：单冒号 display 形式，传 (P-5900)，QEMU 实际绑定 P
         // （详见类注释 v0.2.6：双冒号在 Termux 版 QEMU 上会直接启动失败）

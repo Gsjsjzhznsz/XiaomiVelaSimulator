@@ -206,7 +206,7 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
                         when {
                             showVnc -> "VNC 画面支持触摸（PointerEvent → virtio-tablet）"
                             displayMode == 1 -> "等待 VNC 帧…（无帧缓冲设备的镜像请选「控制台画面」）"
-                            else -> "控制台兑底画面：本镜像无帧缓冲或 VNC 未就绪，串口输出实时上屏"
+                            else -> "控制台画面：当前固件为 NSH 命令行系统（无图形桌面），此处实时渲染串口终端输出"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF9A9AA6),
