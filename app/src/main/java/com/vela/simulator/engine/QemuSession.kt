@@ -49,6 +49,9 @@ class QemuSession(
     private var scope: CoroutineScope? = null
     private var logPump: Job? = null
 
+    /** v0.3.0: 自动启动命令是否已发出（每会话仅一次） */
+    private var autoCommandSent = false
+
     val logLines = MutableStateFlow(listOf("[vela] 会话就绪，等待启动"))
 
     private var pendingSerial = ""
@@ -59,16 +62,37 @@ class QemuSession(
         FileLogger.sessionLine(line)
     }
 
-    /** 串口原始文本：处理不完整行，合并后再展示 */
+    /** 串口原始文本：处理不完整行，合并后再展示；同时检测 NSH 提示符触发自动命令 */
     fun appendLogRaw(text: String) {
         pendingSerial += text
         val parts = pendingSerial.split('\n', '\r')
         pendingSerial = parts.last()
         val complete = parts.dropLast(1).filter { it.isNotEmpty() }
-        if (complete.isEmpty()) return
-        logLines.value = (logLines.value + complete).takeLast(800)
-        _consoleLines.value = (_consoleLines.value + complete).takeLast(400)
-        complete.forEach { FileLogger.sessionLine(it) }
+        if (complete.isNotEmpty()) {
+            logLines.value = (logLines.value + complete).takeLast(800)
+            _consoleLines.value = (_consoleLines.value + complete).takeLast(400)
+            complete.forEach { FileLogger.sessionLine(it) }
+        }
+        maybeAutoCommand()
+    }
+
+    /**
+     * v0.3.0: 检测 NSH 提示符后自动执行模板命令（如 lvgldemo 启动 LVGL 界面）。
+     * 提示符不携带换行，所以同时检查未决缓冲 pendingSerial；命中后延时发送，
+     * 确保 shell 已就绪可读。
+     */
+    private fun maybeAutoCommand() {
+        val cmd = template.qemu.autoCommand.trim()
+        if (cmd.isEmpty() || autoCommandSent) return
+        val tail = pendingSerial + _consoleLines.value.takeLast(2).joinToString(" ")
+        if (!tail.contains("nsh>")) return
+        autoCommandSent = true
+        appendLog("[vela] 检测到 NSH，自动启动界面: $cmd")
+        scope?.launch {
+            delay(1200)
+            runCatching { console.sendLine(cmd) }
+                .onFailure { appendLog("[vela] 自动命令发送失败: ${it.message}") }
+        }
     }
 
     /** 标记会话失败（不抛出，保证调用方不崩溃） */
@@ -82,6 +106,7 @@ class QemuSession(
         check(_state.value != State.RUNNING && _state.value != State.BOOTING) { "会话已在运行" }
         _state.value = State.BOOTING
         _exitCode.value = null
+        autoCommandSent = false
         logLines.value = listOf("[vela] 启动 ${template.name}")
         FileLogger.beginSessionLog(template.name)
         FileLogger.i("session", "开始启动会话 template=${template.id} machine=${template.qemu.machine}")
@@ -135,9 +160,16 @@ class QemuSession(
 
         val proc = process!!
 
-        // QEMU stdout/stderr → 日志
+        // QEMU stdout/stderr → 日志（v0.3.0: 捕获关闭时 read 中断异常，
+        // 修复 stop() 与读循环竞争导致的 InterruptedIOException 伪崩溃）
         logPump = sc.launch {
-            proc.inputStream.bufferedReader().forEachLine { appendLog("[qemu] $it") }
+            runCatching {
+                proc.inputStream.bufferedReader().forEachLine { appendLog("[qemu] $it") }
+            }.onFailure {
+                if (it !is kotlinx.coroutines.CancellationException) {
+                    appendLog("[qemu] 输出流结束: ${it.message}")
+                }
+            }
         }
 
         // 等待串口就绪并连接
@@ -158,27 +190,42 @@ class QemuSession(
 
         // VNC 客户端：连接成功后立即启动帧循环（v0.2.5：原实现从未调用 frameLoop，
         // 无 FramebufferUpdateRequest 上行，QEMU 永不发送画面）
+        // v0.3.0: 外层重连循环。实测 QEMU 在 guest 尚无 scanout（lvgldemo 未启动）
+        // 时收到 SetPixelFormat 会直接断开连接——存在时序竞争：VNC 端口先就绪、
+        // 图形后初始化。未出过画面就断开 → 退避重连，直到 guest 图形就绪。
         if (plan.vncPort > 0) {
             sc.launch {
-                var connected: RfbClient? = null
-                for (i in 1..40) { // 最多 ~20s，等 QEMU VNC 端口就绪
-                    delay(500)
-                    val client = RfbClient()
-                    val ok = runCatching {
-                        client.connect(plan.vncPort, template.screen.width, template.screen.height)
-                    }.getOrDefault(false)
-                    if (ok) { connected = client; break }
+                var attempts = 0
+                while (attempts < 8 && _state.value == State.RUNNING) {
+                    attempts++
+                    var connected: RfbClient? = null
+                    for (i in 1..40) { // 最多 ~20s，等 QEMU VNC 端口就绪
+                        delay(500)
+                        if (_state.value != State.RUNNING) return@launch
+                        val client = RfbClient()
+                        val ok = runCatching {
+                            client.connect(plan.vncPort, template.screen.width, template.screen.height)
+                        }.getOrDefault(false)
+                        if (ok) { connected = client; break }
+                        runCatching { client.close() }
+                    }
+                    val client = connected
+                    if (client == null) {
+                        appendLog("[vnc] 未连接（若镜像无显示设备，画面将自动以控制台兑底显示）")
+                        return@launch
+                    }
+                    vnc = client
+                    appendLog("[vnc] 已连接 127.0.0.1:${plan.vncPort}" + if (attempts > 1) "（重连 #$attempts）" else "")
+                    var gotFrame = false
+                    runCatching { client.frameLoop { gotFrame = true } }
+                        .onFailure { appendLog("[vnc] 画面流中断: ${it.message}") }
                     runCatching { client.close() }
+                    if (vnc === client) vnc = null
+                    // 出过画面说明图形会话已建立；断开多为 guest 退出/会话停止，不再重连
+                    if (gotFrame || _state.value != State.RUNNING) return@launch
+                    appendLog("[vnc] guest 图形尚未就绪（scanout 竞争），2s 后重连")
+                    delay(2000)
                 }
-                val client = connected
-                if (client == null) {
-                    appendLog("[vnc] 未连接（若镜像无显示设备，画面将自动以控制台兑底显示）")
-                    return@launch
-                }
-                vnc = client
-                appendLog("[vnc] 已连接 127.0.0.1:${plan.vncPort}")
-                runCatching { client.frameLoop() }
-                    .onFailure { appendLog("[vnc] 画面流中断: ${it.message}") }
             }
         }
 

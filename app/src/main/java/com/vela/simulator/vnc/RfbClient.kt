@@ -95,7 +95,14 @@ class RfbClient {
     }
 
     /**
-     * 设置像素格式 + 请求整帧更新，循环读取帧缓冲直到连接关闭。
+     * 设置像素格式 + 请求帧缓冲更新，循环读取帧缓冲直到连接关闭。
+     *
+     * v0.3.0 修复（图形固件画面中断）：
+     *  - LVGL/virtio-gpu 初始化后 guest 分辨率变化，QEMU 会发送 desktop-resize
+     *    伪编码矩形（enc=-223，payload 为 0 字节），此前遇非 Raw 直接抛异常断连 →
+     *    图形界面刚要出现画面流就死了。现按新尺寸重建位图后继续；
+     *  - 首轮全量请求后改增量请求（incremental=1），QEMU 仅回传变化区域，
+     *    带宽从每帧整屏 3MB+ 降至变化矩形，触控回显明显更流畅；
      *
      * v0.2.5 修复（画面全黑第二根因）：
      *  - SetPixelFormat 16 字节布局此前整体错位（bits-per-pixel 位置写成了 0，
@@ -110,8 +117,7 @@ class RfbClient {
     suspend fun frameLoop(onFrame: ((Bitmap) -> Unit)? = null) {
         val di = din ?: error("not connected")
         val doo = dout ?: error("not connected")
-        val w = width; val h = height
-        check(w > 0 && h > 0) { "服务器尺寸非法: ${w}x${h}" }
+        check(width > 0 && height > 0) { "服务器尺寸非法: ${width}x${height}" }
 
         // SetPixelFormat (msg 0): 16 字节像素格式，多字节字段按协议大端序发送
         val pf = ByteArray(16)
@@ -126,6 +132,10 @@ class RfbClient {
         pf[11] = 8  // green-shift
         pf[12] = 0  // blue-shift
         doo.write(0)
+        // v0.3.0 修复: RFB 6.5.2 SetPixelFormat = type(1) + padding(3) + pixelformat(16)
+        // 共 20 字节。此前缺 3 字节 padding → QEMU 流失同步 → 直接断连,
+        // 表现为「VNC 已连接但永远收不到画面」。
+        doo.write(ByteArray(3))
         doo.write(pf)
         doo.flush()
 
@@ -136,14 +146,18 @@ class RfbClient {
         doo.writeInt(0) // encoding raw
         doo.flush()
 
+        var w = width
+        var h = height
         var bitmap = framebuffer ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { framebuffer = it }
-        val pixels = IntArray(w * h)
+        var pixels = IntArray(w * h)
+        var firstFrame = true
 
         try {
             while (running.get()) {
-                // FramebufferUpdateRequest: incremental=0 请求全量（低频轮询，足够演示）
+                // FramebufferUpdateRequest: 首轮全量，之后增量（只回传变化区域）
                 synchronized(writeLock) {
-                    doo.write(3); doo.write(0)
+                    doo.write(3)
+                    doo.write(if (firstFrame) 0 else 1)
                     doo.writeShort(0); doo.writeShort(0); doo.writeShort(w); doo.writeShort(h)
                     doo.flush()
                 }
@@ -154,23 +168,39 @@ class RfbClient {
                         di.readUnsignedByte() // pad
                         val numRects = di.readUnsignedShort()
                         var content = false
-                        repeat(numRects.coerceAtMost(64)) {
+                        var resized = false
+                        var pending = numRects.coerceAtMost(64)
+                        while (pending > 0) {
+                            pending--
                             // 矩形头: x(u16) y(u16) w(u16) h(u16) encoding(s32)
                             val rx = di.readUnsignedShort()
                             val ry = di.readUnsignedShort()
                             val rw = di.readUnsignedShort()
                             val rh = di.readUnsignedShort()
                             val enc = di.readInt()
+                            if (enc == DESKTOP_RESIZE_ENC) {
+                                // 分辨率变化: 以矩形 w/h 为新尺寸, 无像素数据
+                                w = rw; h = rh
+                                if (w <= 0 || h <= 0 || w * h > 64_000_000) {
+                                    throw java.io.IOException("非法 resize 尺寸: ${w}x${h}")
+                                }
+                                bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                                framebuffer = bitmap
+                                pixels = IntArray(w * h)
+                                firstFrame = true
+                                resized = true
+                                continue
+                            }
                             if (enc != 0) {
-                                // 只请求了 Raw，理论不应出现其它编码；防御性断开
+                                // 只请求了 Raw；desktop-resize 已处理，其余一律防御性断开
                                 throw java.io.IOException("非 Raw 编码 rect: enc=$enc")
                             }
-                            if (rw == 0 || rh == 0) return@repeat
+                            if (rw == 0 || rh == 0) continue
                             if (rx >= w || ry >= h) {
                                 // 越界矩形：仍需吞掉数据保持流同步
                                 val skip = ByteArray(rw * 4)
                                 for (yy in 0 until rh) di.readFully(skip)
-                                return@repeat
+                                continue
                             }
                             val bpp = 4
                             val lineBytes = rw * bpp
@@ -190,12 +220,20 @@ class RfbClient {
                                 }
                             }
                         }
+                        if (resized) {
+                            // 尺寸已更新: 立即请求新尺寸的全量帧, 通知 UI 尺寸变化
+                            frameVersion.incrementAndGet()
+                            onFrame?.invoke(bitmap)
+                            firstFrame = true
+                            continue
+                        }
                         if (numRects > 0) {
                             bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
                             frameHasContent = content
                             frameReady = true
                             frameVersion.incrementAndGet()
                             onFrame?.invoke(bitmap)
+                            firstFrame = false
                         }
                     }
                     1 -> { // SetColourMapEntries
@@ -282,6 +320,9 @@ class RfbClient {
         const val KEY_DOWN = 0xFF54
         const val KEY_LEFT = 0xFF51
         const val KEY_RIGHT = 0xFF53
+
+        /** RFB desktop-resize 伪编码（QEMU 在 guest 分辨率变化时发送, payload 0 字节） */
+        const val DESKTOP_RESIZE_ENC = -223
     }
 
     fun close() {

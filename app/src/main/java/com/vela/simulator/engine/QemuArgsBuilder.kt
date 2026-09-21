@@ -15,6 +15,21 @@ import java.net.ServerSocket
  *  - 串口 nsh  : -serial tcp:127.0.0.1:<port>,server（App 作为客户端连接）
  *  - VNC 画面  : -vnc 127.0.0.1:<display>（可选，画面视图，实际监听 display+5900）
  *
+ * v0.3.0 修复（无画面根因，官方 VSCode 扩展有画面而本应用黑屏）:
+ *  1) 固件原因: 此前使用的 qemu-armv7a:nsh 是纯控制台固件（无图形栈），
+ *     VNC 连上也没有任何内容可渲染。已切换 openvela 官方 full 配置固件
+ *     （LVGL + virtio-gpu + virtio-input），配合串口自动执行 lvgldemo 启动界面；
+ *  2) 设备原因: -M virt 默认无虚拟显卡，VNC 只能输出黑帧。
+ *     新增 -device virtio-gpu-device 接入 guest 的 virtio-gpu 帧缓冲驱动
+ *     （mmio 版无 romfile 属性，勿加 romfile=，实测会报 Property not found 退出）；
+ *  3) 触摸修正: NuttX 侧仅有 virtio-mmio 总线驱动（无 virtio-pci），
+ *     virtio-tablet-pci 改为 virtio-tablet-device（mmio），否则 guest 看不到输入设备；
+ *  4) ROM 兜底: 默认网络设备 virtio-net-pci 需要 efi-virtio.rom，Termux 可能不
+ *     附带 → -nic none 关闭默认网卡但保留其余默认设备（VNC 输入控制台依赖，
+ *     -nodefaults 会导致指针事件无法路由，实测复现）；
+ *  5) open-vela 官方模拟器路线即虚拟显卡 + 触摸输入 + VNC（官方 FAQ: 手环/手表
+ *     统一使用虚拟平台模拟），本修改对齐该体验。
+ *
  * v0.2.7 修复（无画面/无输出根因，实测自用户日志 session-20260921-075607）：
  *  原 -serial ...,server,nowait 模式下，客户端连接前的串口输出直接丢失。
  *  Cortex-M（mps2）引导极快（毫秒级），nx_start 全部输出在 App 首次连接（500ms 后）
@@ -66,8 +81,18 @@ object QemuArgsBuilder {
                 args += listOf("-M", "virt", "-cpu", q.cpu)
                 args += listOf("-smp", q.smp.coerceIn(1, 8).toString())
                 args += listOf("-m", q.memoryMb.coerceIn(64, 2048).toString() + "M")
-                // 触摸输入: 绝对指针平板设备（VNC PointerEvent -> virtio input -> guest）
-                if (q.touchInput) args += listOf("-device", "virtio-tablet-pci")
+                // 虚拟显卡（v0.3.0）: guest 的 virtio-gpu 帧缓冲驱动通过它渲染画面，
+                // VNC 服务该帧缓冲。注意 mmio 版 virtio-gpu-device 没有 romfile 属性
+                // （PCI 设备才有，实测加 romfile= 直接报 Property not found 退出）
+                args += listOf("-device", "virtio-gpu-device")
+                // 触摸输入（v0.3.0 修正为 mmio 总线: NuttX 无 virtio-pci 驱动）
+                // VNC PointerEvent(绝对坐标) → virtio-tablet → guest /dev/input0
+                if (q.touchInput) args += listOf("-device", "virtio-tablet-device")
+                // 关闭默认网络设备（v0.3.0）: 默认 virtio-net-pci 需要 efi-virtio.rom，
+                // Termux headless 包可能不附带 pc-bios ROM → QEMU 启动即退出。
+                // -nic none 保留其余默认设备（VNC 输入控制台依赖它们，-nodefaults 会让
+                // VNC 指针事件无法路由，实测复现）
+                args += listOf("-nic", "none")
             }
             DeviceTemplate.QemuSpec.MACHINE_MPS2_AN500 -> {
                 args += listOf("-M", "mps2-an500", "-cpu", "cortex-m7")

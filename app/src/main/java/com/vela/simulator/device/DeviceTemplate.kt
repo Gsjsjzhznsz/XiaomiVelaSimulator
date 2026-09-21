@@ -60,17 +60,20 @@ data class DeviceTemplate(
         /** 虚拟机内存（仅 virt 支持自定义），MPS2 机器内存固定 */
         val memoryMb: Int = 256,
         /** 镜像文件名（位于应用 images 目录），与 manifest 中的 defaultKernel 对应 */
-        val kernel: String = KERNEL_OPENVELA_ARMV7A_NSH,
+        val kernel: String = KERNEL_OPENVELA_ARMV7A_FULL,
         /** 附加 QEMU 参数（原样追加） */
         val extraArgs: String = "",
-        /** 触摸输入: virt 机器挂载 virtio-tablet-pci 绝对指针设备，画面视图可触摸 */
+        /** 触摸输入: virt 机器挂载 virtio-tablet-device 绝对指针设备（virtio-mmio），画面视图可触摸 */
         val touchInput: Boolean = true,
+        /** NSH 提示符出现后自动执行的命令（如 lvgldemo 启动图形界面，空 = 不自动执行） */
+        val autoCommand: String = "",
     ) {
         companion object {
             const val MACHINE_VIRT = "virt"
             const val MACHINE_MPS2_AN500 = "mps2-an500"
             const val MACHINE_MPS2_AN521 = "mps2-an521"
             const val KERNEL_OPENVELA_ARMV7A_NSH = "openvela-qemu-armv7a-nsh.elf"
+            const val KERNEL_OPENVELA_ARMV7A_FULL = "openvela-qemu-armv7a-full.elf"
             const val KERNEL_OPENVELA_MPS2_AN500_NSH = "openvela-mps2-an500-nsh.elf"
             const val KERNEL_OPENVELA_MPS2_AN521_NSH = "openvela-mps2-an521-nsh.elf"
         }
@@ -104,9 +107,12 @@ data class DeviceTemplate(
             else -> "方形"
         }
 
-    /** 适合的默认镜像清单条目 id */
+    /** 适合的默认镜像清单条目 id（virt → full 图形版；mps2 → 对应 nsh 控制台版） */
     val suggestedImageId: String
-        get() = if (qemu.machine == QemuSpec.MACHINE_VIRT) "openvela-armv7a-nsh" else "openvela-${qemu.machine}-nsh"
+        get() = when (qemu.machine) {
+            QemuSpec.MACHINE_VIRT -> "openvela-armv7a-full"
+            else -> "openvela-${qemu.machine}-nsh"
+        }
 
     companion object {
         const val CATEGORY_WATCH = "watch"

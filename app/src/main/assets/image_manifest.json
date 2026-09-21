@@ -1,8 +1,24 @@
 {
   "version": 1,
-  "updated": "2026-09-20",
+  "updated": "2026-09-21",
   "baseRepo": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator",
   "images": [
+    {
+      "id": "openvela-armv7a-full",
+      "name": "openvela · qemu-armv7a 图形版 (Cortex-A / 手表类)",
+      "desc": "openvela 官方源码 qemu-armv7a:full 配置构建: LVGL 9.2.1 图形栈 + virtio-gpu 显示 + virtio-input 触摸, 自动启动 lvgldemo 界面。含本地修复补丁: 触摸坐标缩放与 BTN_LEFT 接触门控(点击无反应)、释放样本 npoints=1 惯例(变长样本导致释放丢失)、lvgldemo 指向 /dev/fb0。已在 QEMU virt 机器端到端验证画面渲染与触摸交互。",
+      "machine": "virt",
+      "kernel": "openvela-qemu-armv7a-full.elf",
+      "source": "open-vela/nuttx dev 分支 qemu-armv7a:full · LVGL 9.2.1 · 构建时间见 Release",
+      "files": [
+        {
+          "url": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator/releases/download/v0.3.0/openvela-qemu-armv7a-full.elf",
+          "sha256": "3cf6671d1fbcf7379c89f9358ed1abaa8474699b043e23026b34120eefdc602d",
+          "size": 16002700,
+          "out": "openvela-qemu-armv7a-full.elf"
+        }
+      ]
+    },
     {
       "id": "openvela-armv7a-nsh",
       "name": "openvela · qemu-armv7a (Cortex-A / 手表类)",

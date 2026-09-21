@@ -33,8 +33,9 @@
     "cpu": "cortex-a7",
     "smp": 1,
     "memoryMb": 512,
-    "kernel": "openvela-qemu-armv7a-nsh.elf",
-    "extraArgs": ""
+    "kernel": "openvela-qemu-armv7a-full.elf",
+    "extraArgs": "",
+    "autoCommand": "lvgldemo"
   },
   "ui": {
     "accentColor": "#FF6900",
