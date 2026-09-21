@@ -109,3 +109,22 @@
 09-21 07:06:22.611 I/session: 开始启动会话 template=smart-band-11 machine=mps2-an500
 09-21 07:06:22.617 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:46077,server,nowait -vnc 127.0.0.1::33285 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
 09-21 07:06:22.666 I/session: QEMU 退出 code=1
+09-21 07:55:57.911 I/app: ===== VELA Simulator 日志会话开始 20260921-075557 =====
+09-21 07:55:57.924 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-21 07:55:57.926 I/app: CrashGuard 已安装
+09-21 07:55:57.991 I/app: VelaApp.onCreate
+09-21 07:55:58.262 I/app: MainActivity.onCreate
+09-21 07:55:59.477 I/templates: 模板加载完成: 15 个
+09-21 07:56:07.207 I/session: 会话日志: session-20260921-075607.log
+09-21 07:56:07.208 I/session: 开始启动会话 template=smart-band-11 machine=mps2-an500
+09-21 07:56:07.214 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:40175,server,nowait -vnc 127.0.0.1:30081 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-21 07:57:07.154 I/image: 镜像下载完成: openvela-armv7a-nsh
+09-21 07:57:24.754 I/app: ===== VELA Simulator 日志会话开始 20260921-075724 =====
+09-21 07:57:24.761 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-21 07:57:24.762 I/app: CrashGuard 已安装
+09-21 07:57:24.795 I/app: VelaApp.onCreate
+09-21 07:57:24.954 I/app: MainActivity.onCreate
+09-21 07:57:25.871 I/templates: 模板加载完成: 15 个
+09-21 07:57:29.225 I/session: 会话日志: session-20260921-075729.log
+09-21 07:57:29.225 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-21 07:57:29.231 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-tablet-pci -kernel /data/user/0/com.vela.simulator/files/images/openvela-qemu-armv7a-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:40827,server,nowait -vnc 127.0.0.1:29461 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
