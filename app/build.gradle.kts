@@ -20,8 +20,8 @@ android {
          * 详见 README "为什么 targetSdk 是 28" 一节。
          */
         targetSdk = 28
-        versionCode = 10
-        versionName = "0.3.1"
+        versionCode = 11
+        versionName = "0.3.2"
     }
 
     buildFeatures {

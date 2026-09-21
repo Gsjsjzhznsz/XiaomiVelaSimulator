@@ -51,6 +51,11 @@ class RfbClient {
     fun connect(port: Int, expectW: Int, expectH: Int): Boolean {
         val s = Socket()
         s.connect(InetSocketAddress("127.0.0.1", port), 2000)
+        // v0.3.2: 握手阶段必须有读超时。此前无 SO_TIMEOUT —— 若 QEMU 接受了 TCP
+        // 但主循环迟迟未发 RFB banner（真机 session-20260921-233137 的症状：
+        // 24s 内零 [vnc] 日志且无失败记录，唯一能解释的就是首连挂死在 readFully），
+        // connect() 会永久阻塞，外层重连循环也永远走不到下一次尝试/日志。
+        s.soTimeout = 5000
         s.tcpNoDelay = true
         socket = s
         din = DataInputStream(s.getInputStream().buffered())
@@ -97,24 +102,24 @@ class RfbClient {
     /**
      * 设置像素格式 + 请求帧缓冲更新，循环读取帧缓冲直到连接关闭。
      *
-     * v0.3.0 修复（图形固件画面中断）：
-     *  - LVGL/virtio-gpu 初始化后 guest 分辨率变化，QEMU 会发送 desktop-resize
-     *    伪编码矩形（enc=-223，payload 为 0 字节），此前遇非 Raw 直接抛异常断连 →
-     *    图形界面刚要出现画面流就死了。现按新尺寸重建位图后继续；
-     *  - 首轮全量请求后改增量请求（incremental=1），QEMU 仅回传变化区域，
-     *    带宽从每帧整屏 3MB+ 降至变化矩形，触控回显明显更流畅；
+     * v0.3.2 加固：
+     *  - [onEnd] 回调携带退出原因（异常消息/null=正常关闭），调用方据此写
+     *    会话日志。此前 catch(Exception) 静默吞掉一切，帧循环悄悄死掉时
+     *    日志层面毫无痕迹，真机排障无从下手；
+     *  - 读取加 30s SO_TIMEOUT：超时不退出，重发一次全量 FBU 请求后继续。
+     *    LVGL 静止画面可能长时间无更新，但 30s 一点动静都没有则大概率
+     *    连接已假死（NAT/中间层/半开连接），主动探测自愈而不是永远阻塞；
+     *  - 首轮全量请求后改增量请求（incremental=1），QEMU 仅回传变化区域；
      *
-     * v0.2.5 修复（画面全黑第二根因）：
-     *  - SetPixelFormat 16 字节布局此前整体错位（bits-per-pixel 位置写成了 0，
-     *    QEMU 无法按 32bpp 编码），现按 RFB 规范填入：bpp/depth=32、
-     *    little-endian、true-color、max=255×3、shift=16/8/0（对应内存序 B,G,R,X，
-     *    与下方解码循环一致）；
-     *  - FramebufferUpdate 矩形头此前按 5 个 u16 错序读取，实为 x,y,w,h,enc，
-     *    且此前丢弃 numRects 只处理第一个矩形，现按 numRects 逐个解码。
+     * v0.3.0 修复（图形固件画面中断）：desktop-resize 伪编码（enc=-223）
+     * 按新尺寸重建位图后继续；
+     *
+     * v0.2.5 修复（画面全黑第二根因）：SetPixelFormat 16 字节布局重填、
+     * FramebufferUpdate 矩形头正序读取、按 numRects 逐个解码。
      *
      * 必须在 [connect] 成功后调用；阻塞至连接关闭，请在协程中调用。
      */
-    suspend fun frameLoop(onFrame: ((Bitmap) -> Unit)? = null) {
+    suspend fun frameLoop(onFrame: ((Bitmap) -> Unit)? = null, onEnd: ((String?) -> Unit)? = null) {
         val di = din ?: error("not connected")
         val doo = dout ?: error("not connected")
         check(width > 0 && height > 0) { "服务器尺寸非法: ${width}x${height}" }
@@ -151,6 +156,8 @@ class RfbClient {
         var bitmap = framebuffer ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { framebuffer = it }
         var pixels = IntArray(w * h)
         var firstFrame = true
+        var endReason: String? = null
+        socket?.soTimeout = 30_000
 
         try {
             while (running.get()) {
@@ -162,7 +169,16 @@ class RfbClient {
                     doo.flush()
                 }
 
-                val msgType = di.readUnsignedByte()
+                // v0.3.2: 消息头读取带 SO_TIMEOUT。超时说明画面长时间无更新或连接
+                // 假死 —— 此处流必然处于消息边界，直接重发全量 FBU 请求自愈；
+                // 若连接已死，后续读会抛 IOException 由外层退出并上报原因
+                val msgType = try {
+                    di.readUnsignedByte()
+                } catch (e: java.io.InterruptedIOException) {
+                    if (!running.get()) throw e
+                    firstFrame = true
+                    continue
+                }
                 when (msgType) {
                     0 -> { // FramebufferUpdate
                         di.readUnsignedByte() // pad
@@ -260,10 +276,12 @@ class RfbClient {
                     else -> throw java.io.IOException("未知消息类型: $msgType")
                 }
             }
-        } catch (_: Exception) {
-            // 连接关闭/对端断开：静默退出帧循环（调用方负责清理）
+        } catch (e: Exception) {
+            // 连接关闭/对端断开/中途异常：上报原因供调用方写会话日志
+            endReason = e.message ?: e.javaClass.simpleName
         } finally {
             running.set(false)
+            try { onEnd?.invoke(endReason) } catch (_: Exception) {}
         }
     }
 
@@ -272,15 +290,22 @@ class RfbClient {
     }
 
     /**
-     * 发送指针事件（RFB PointerEvent, msg-type=4）—— 触摸/点击的上行通道。
+     * 发送指针事件（RFB PointerEvent, msg-type=5）—— 触摸/点击的上行通道。
      * QEMU 侧由 virtio-tablet 等绝对指针设备接收为绝对坐标。
      * buttonMask: bit0=左键(按下触摸)。
+     *
+     * v0.3.2 修复（真机触摸完全失效的根因，见 session-20260921-212344 的
+     * "no scancode found for keysym 1024" 警告）：RFB 消息类型此前写成了 4——
+     * 4 是 KeyEvent！PointerEvent 应为 5。QEMU 把每个触摸点都解析成了
+     * “按下 keysym=y 坐标的键”，guest 收不到任何指针事件，触摸永远无效；
+     * 且 sendKey 反向写成了 3（= FramebufferUpdateRequest），控制台按键
+     * 会拼出带垃圾坐标的更新请求污染帧循环。
      */
     fun sendPointer(x: Int, y: Int, buttonMask: Int) {
         val d = dout ?: return
         synchronized(writeLock) {
             runCatching {
-                d.write(4)
+                d.write(5)          // PointerEvent（v0.3.1 及之前误写为 4=KeyEvent）
                 d.write(buttonMask and 0xFF)
                 d.writeShort(x.coerceIn(0, 65535))
                 d.writeShort(y.coerceIn(0, 65535))
@@ -293,14 +318,14 @@ class RfbClient {
     fun sendTouch(x: Int, y: Int, pressed: Boolean) = sendPointer(x, y, if (pressed) 1 else 0)
 
     /**
-     * 发送按键事件（RFB KeyEvent, msg-type=3），keysym 为 X11 keysym 编码。
+     * 发送按键事件（RFB KeyEvent, msg-type=4），keysym 为 X11 keysym 编码。
      * down=false 表示松开。
      */
     fun sendKey(keysym: Int, down: Boolean) {
         val d = dout ?: return
         synchronized(writeLock) {
             runCatching {
-                d.write(3)
+                d.write(4)          // KeyEvent（v0.3.1 及之前误写为 3=FramebufferUpdateRequest）
                 d.write(if (down) 1 else 0)
                 d.writeShort(0)
                 d.writeInt(keysym)

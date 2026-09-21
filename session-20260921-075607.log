@@ -1,4 +1,0 @@
-===== 会话: Xiaomi Smart Band 11 =====
-[qemu-cmd] /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:40175,server,nowait -vnc 127.0.0.1:30081 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
-[serial] 已连接串口 tcp:40175
-[vnc] 已连接 127.0.0.1:35981

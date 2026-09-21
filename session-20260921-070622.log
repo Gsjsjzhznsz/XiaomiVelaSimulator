@@ -1,4 +1,0 @@
-===== 会话: Xiaomi Smart Band 11 =====
-[qemu-cmd] /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M mps2-an500 -cpu cortex-m7 -kernel /data/user/0/com.vela.simulator/files/images/openvela-mps2-an500-nsh.elf -display none -monitor none -serial tcp:127.0.0.1:46077,server,nowait -vnc 127.0.0.1::33285 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
-[qemu] qemu-system-arm: -vnc 127.0.0.1::33285: address resolution failed for 127.0.0.1::39185: No address associated with hostname
-[vela] QEMU 已退出（代码 1）

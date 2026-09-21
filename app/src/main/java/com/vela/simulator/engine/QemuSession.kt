@@ -172,6 +172,21 @@ class QemuSession(
             }
         }
 
+        // v0.3.2: 状态先于所有协程置位。原实现把 RUNNING 放在全部 launch 之后，
+        // VNC 协程首条 while(state==RUNNING) 可能在置位前被调度执行 → 整个
+        // VNC 循环静默退出，会话日志无任何 [vnc] 行（真机 233137 症状之一）。
+        _state.value = State.RUNNING
+
+        // 进程退出监听
+        sc.launch {
+            val code = proc.waitFor()
+            _exitCode.value = code
+            _state.value = if (_state.value != State.IDLE) State.EXITED else State.IDLE
+            appendLog("[vela] QEMU 已退出（代码 $code）")
+            FileLogger.i("session", "QEMU 退出 code=$code")
+            console.close()
+        }
+
         // 等待串口就绪并连接
         // v0.2.5 修复：原实现用 return@repeat 试图退出（对 inline repeat 无效），
         // 连接成功后仍会继续重连 40 次，反复拆建串口丢失启动期输出。
@@ -193,32 +208,52 @@ class QemuSession(
         // v0.3.0: 外层重连循环。实测 QEMU 在 guest 尚无 scanout（lvgldemo 未启动）
         // 时收到 SetPixelFormat 会直接断开连接——存在时序竞争：VNC 端口先就绪、
         // 图形后初始化。未出过画面就断开 → 退避重连，直到 guest 图形就绪。
+        // v0.3.2:
+        //  1) 内层不再 40 次(≈20s)后放弃 —— QEMU 10/11 的 VNC 监听器绑定推迟到
+        //     machine init（串口客户端连接）之后，低端真机 TCG 下该窗口可能明显
+        //     超过 20s，原逻辑会在端口就绪前永久放弃且只留一条“未连接”日志；
+        //     改为持续重试直至会话结束；
+        //  2) 每次失败记录原因（拒绝/超时/握手失败），日志节流：首 3 次 + 每 20 次；
+        //  3) 帧循环退出原因（onEnd）写入会话日志，不再静默死亡。
         if (plan.vncPort > 0) {
             sc.launch {
-                var attempts = 0
-                while (attempts < 8 && _state.value == State.RUNNING) {
-                    attempts++
+                var rounds = 0
+                while (_state.value == State.RUNNING) {
+                    rounds++
                     var connected: RfbClient? = null
-                    for (i in 1..40) { // 最多 ~20s，等 QEMU VNC 端口就绪
+                    var lastErr: String? = null
+                    var n = 0
+                    while (true) {
+                        n++
                         delay(500)
                         if (_state.value != State.RUNNING) return@launch
                         val client = RfbClient()
                         val ok = runCatching {
                             client.connect(plan.vncPort, template.screen.width, template.screen.height)
-                        }.getOrDefault(false)
+                        }.onFailure { lastErr = it.message ?: it.javaClass.simpleName }
+                            .getOrDefault(false)
                         if (ok) { connected = client; break }
                         runCatching { client.close() }
+                        if (n <= 3 || n % 20 == 0) {
+                            appendLog("[vnc] 连接尝试 #$n 失败: ${lastErr ?: "未知原因"}（持续重试中，等待 QEMU VNC 端口就绪）")
+                        }
                     }
                     val client = connected
-                    if (client == null) {
-                        appendLog("[vnc] 未连接（若镜像无显示设备，画面将自动以控制台兑底显示）")
-                        return@launch
-                    }
+                    if (client == null) return@launch // 会话已结束
                     vnc = client
-                    appendLog("[vnc] 已连接 127.0.0.1:${plan.vncPort}" + if (attempts > 1) "（重连 #$attempts）" else "")
+                    appendLog(
+                        "[vnc] 已连接 127.0.0.1:${plan.vncPort}" +
+                            if (n > 1) "（第 $rounds 轮，经 $n 次尝试）" else ""
+                    )
                     var gotFrame = false
-                    runCatching { client.frameLoop { gotFrame = true } }
-                        .onFailure { appendLog("[vnc] 画面流中断: ${it.message}") }
+                    runCatching {
+                        client.frameLoop(
+                            onFrame = { gotFrame = true },
+                            onEnd = { reason ->
+                                if (reason != null) appendLog("[vnc] 画面流结束: $reason")
+                            },
+                        )
+                    }.onFailure { appendLog("[vnc] 画面流异常退出: ${it.message}") }
                     runCatching { client.close() }
                     if (vnc === client) vnc = null
                     // 出过画面说明图形会话已建立；断开多为 guest 退出/会话停止，不再重连
@@ -228,18 +263,6 @@ class QemuSession(
                 }
             }
         }
-
-        // 进程退出监听
-        sc.launch {
-            val code = proc.waitFor()
-            _exitCode.value = code
-            _state.value = if (_state.value != State.IDLE) State.EXITED else State.IDLE
-            appendLog("[vela] QEMU 已退出（代码 $code）")
-            FileLogger.i("session", "QEMU 退出 code=$code")
-            console.close()
-        }
-
-        _state.value = State.RUNNING
     }
 
     fun stop() {
