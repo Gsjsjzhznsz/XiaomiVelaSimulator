@@ -89,9 +89,15 @@ object QemuArgsBuilder {
                 // VIRTIO_GPU_CMD_GET_DISPLAY_INFO 跟随宿主 scanout 尺寸，
                 // LVGL/lvgldemo 再按 fb0 varinfo 自适应。不注入时 QEMU 用默认
                 // 1024x768(4:3)，圆表 letterbox 后被裁成“椭圆”（真机反馈）。
+                // 注入宽度向上对齐到 32 像素：QEMU VNC 服务器按脏矩形粒度
+                // （VNC_DIRTY_PIXELS_PER_BIT=32）上报表面宽度（高度原样上报），
+                // 若 fb 宽非 32 倍数（如 466），VNC 会报 480 并右侧填充 →
+                // 触摸归一化链路产生 ~3% 偏差。宽度预对齐后 VNC 表面/guest
+                // 帧缓冲/触摸三者严格一致。
                 val xres = template.screen.width.coerceIn(64, 4096)
                 val yres = template.screen.height.coerceIn(64, 4096)
-                args += listOf("-device", "virtio-gpu-device,xres=$xres,yres=$yres")
+                val xr = (xres + 31) / 32 * 32
+                args += listOf("-device", "virtio-gpu-device,xres=$xr,yres=$yres")
                 // 触摸输入（v0.3.0 修正为 mmio 总线: NuttX 无 virtio-pci 驱动）
                 // VNC PointerEvent(绝对坐标) → virtio-tablet → guest /dev/input0
                 if (q.touchInput) args += listOf("-device", "virtio-tablet-device")
