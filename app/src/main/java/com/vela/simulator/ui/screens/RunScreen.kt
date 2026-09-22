@@ -51,6 +51,13 @@ import com.vela.simulator.ui.theme.VelaRed
 import com.vela.simulator.ui.theme.VelaSurface
 import com.vela.simulator.ui.theme.VelaSurfaceHigh
 import android.widget.Toast
+import androidx.compose.runtime.mutableLongStateOf
+
+/** QEMU 无 scanout 时的默认占位 surface 尺寸（"Display output is not active."） */
+private val BOOT_PLACEHOLDER_SIZE = 640 to 480
+
+/** 启动遮罩最长停留：超过后直接露出实际画面（即使仍是占位），避免无限遮盖 */
+private const val BOOT_OVERLAY_TIMEOUT_MS = 20_000L
 
 /** 运行页：串口 nsh 控制台 + VNC 帧缓冲画面 双视图 */
 @Composable
@@ -92,6 +99,25 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
         1 -> vncFrame != null
         else -> false
     }
+
+    // v0.3.3 启动遮罩：App 早于 guest 引导完成就连上 VNC，此时 QEMU 是无 scanout
+    // 的 640x480 占位 surface（"Display output is not active."，用户实机截图
+    // vela_shot_20260922_160902 取证），观感像“没有系统”。在位图仍为占位尺寸
+    // 且运行未超 20s 期间，叠加「系统启动中」提示层；guest 扫描输出就绪
+    // （desktop-resize 到模板分辨率）或超时后自动消失。
+    val runningAt = remember(session, state) {
+        if (state == QemuSession.State.RUNNING) System.currentTimeMillis() else 0L
+    }
+    var nowMs by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(runningAt) {
+        while (runningAt > 0) { nowMs = System.currentTimeMillis(); kotlinx.coroutines.delay(250) }
+    }
+    val fbSize = vncFrame?.second?.let { it.width to it.height }
+    val onPlaceholder = fbSize == null || fbSize == BOOT_PLACEHOLDER_SIZE
+    val bootElapsed = if (runningAt > 0) nowMs - runningAt else Long.MAX_VALUE
+    val showBootOverlay = state == QemuSession.State.RUNNING &&
+        (session?.vnc?.frameVersion?.get() ?: 0) > 0 && onPlaceholder &&
+        bootElapsed < BOOT_OVERLAY_TIMEOUT_MS
 
     Column(modifier.fillMaxSize()) {
         // 顶栏
@@ -187,6 +213,32 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
                                 session?.vnc?.sendTouch(x, y, pressed)
                             },
                         )
+                        if (showBootOverlay) {
+                            Box(
+                                Modifier.fillMaxSize().background(Color(0xCC101014)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        "系统启动中…",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "图形栈就绪后自动显示（约 5-20 秒，与真机开机体验一致）",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFB8B8C2),
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "长时间停留请切「控制台」查看串口日志",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF8A8A96),
+                                    )
+                                }
+                            }
+                        }
                     } else {
                         // 兑底显示：串口输出直接渲染成设备屏幕（保证一定有画面）
                         val consoleLines = session?.consoleLines?.collectAsState()?.value ?: emptyList()

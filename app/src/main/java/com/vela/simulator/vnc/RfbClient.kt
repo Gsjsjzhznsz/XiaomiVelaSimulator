@@ -18,6 +18,19 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * NuttX/openvela 的带帧缓冲镜像（如 lvgl demo + virtio-gpu）可通过该视图观察画面；
  * 无显示设备的镜像（纯 nsh）会显示空帧，属正常现象。
+ *
+ * v0.3.3 修复（真机「画面卡在 640x480 占位/右侧黑条/触摸偏移」的最终根因，
+ * 取证自用户实机截图 vela_shot_20260922_161325.png + QEMU ui/vnc.c 源码）：
+ *  App 在 QEMU 启动后立刻连上 VNC（早于 guest 引导完成），ServerInit 拿到的是
+ *  QEMU 无 scanout 时的默认占位 surface 640x480（画面为
+ *  "Display output is not active."）。guest 的 virtio-gpu 扫描输出就绪后，
+ *  QEMU 只有在客户端订阅了 desktop-resize 伪编码（enc=-223）时才会通知尺寸
+ *  变化（ui/vnc.c: vnc_desktop_resize → !vnc_has_feature(VNC_FEATURE_RESIZE)
+ *  → 直接 return；该 feature 仅由 SetEncodings 中的 -223 置位）。
+ *  原实现只订阅了 Raw → resize 永远收不到 → 位图锁死 640x480：guest 画面被
+ *  blit 进左上角（右侧黑条），触摸归一化按 640x480 计算偏差 ~48%。
+ *  修复：SetEncodings 同时订阅 Raw(0) + DesktopResize(-223)，收到 resize 后
+ *  按新尺寸重建位图并立即请求全量帧（解码分支 v0.3.0 已有，本次补上订阅）。
  */
 class RfbClient {
 
@@ -42,6 +55,12 @@ class RfbClient {
     /** 上一帧是否含非黑像素（无显示设备的镜像发来的帧全黑，UI 用此自动回退控制台画面） */
     @Volatile
     var frameHasContent: Boolean = false
+        private set
+
+    /** ServerInit 报告的初始尺寸（v0.3.3 取证用：早连接时它是 640x480 占位 surface） */
+    var serverInitWidth: Int = 0
+        private set
+    var serverInitHeight: Int = 0
         private set
 
     private var width = 0
@@ -93,6 +112,7 @@ class RfbClient {
         val w = di.readUnsignedShort()
         val h = di.readUnsignedShort()
         width = w; height = h
+        serverInitWidth = w; serverInitHeight = h
         di.skipBytes(16) // pixelformat
         val nameLen = di.readInt()
         val name = ByteArray(nameLen); di.readFully(name)
@@ -119,7 +139,12 @@ class RfbClient {
      *
      * 必须在 [connect] 成功后调用；阻塞至连接关闭，请在协程中调用。
      */
-    suspend fun frameLoop(onFrame: ((Bitmap) -> Unit)? = null, onEnd: ((String?) -> Unit)? = null) {
+    suspend fun frameLoop(
+        onFrame: ((Bitmap) -> Unit)? = null,
+        onEnd: ((String?) -> Unit)? = null,
+        /** v0.3.3: 收到 desktop-resize 时回调新尺寸（供会话日志取证） */
+        onResize: ((Int, Int) -> Unit)? = null,
+    ) {
         val di = din ?: error("not connected")
         val doo = dout ?: error("not connected")
         check(width > 0 && height > 0) { "服务器尺寸非法: ${width}x${height}" }
@@ -144,11 +169,16 @@ class RfbClient {
         doo.write(pf)
         doo.flush()
 
-        // SetEncodings: Raw only
+        // SetEncodings: Raw + DesktopResize
+        // v0.3.3 关键修复：必须显式订阅 desktop-resize(-223)，QEMU 才会在 guest
+        // 扫描输出尺寸变化时发 resize 伪编码（ui/vnc.c vnc_desktop_resize 的
+        // vnc_has_feature(VNC_FEATURE_RESIZE) 门控）。只订阅 Raw 时，App 早于
+        // guest 图形就绪连接会永久锁死在占位 640x480 surface 上。
         doo.write(2) // SetEncodings
         doo.write(0) // pad
-        doo.writeShort(1)
-        doo.writeInt(0) // encoding raw
+        doo.writeShort(2)
+        doo.writeInt(0)                   // encoding raw
+        doo.writeInt(DESKTOP_RESIZE_ENC)  // -223 desktop-resize
         doo.flush()
 
         var w = width
@@ -205,6 +235,7 @@ class RfbClient {
                                 pixels = IntArray(w * h)
                                 firstFrame = true
                                 resized = true
+                                runCatching { onResize?.invoke(w, h) }
                                 continue
                             }
                             if (enc != 0) {

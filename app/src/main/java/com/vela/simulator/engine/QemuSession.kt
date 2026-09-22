@@ -245,12 +245,24 @@ class QemuSession(
                         "[vnc] 已连接 127.0.0.1:${plan.vncPort}" +
                             if (n > 1) "（第 $rounds 轮，经 $n 次尝试）" else ""
                     )
+                    // v0.3.3: 初始尺寸取证 —— 早连接时 ServerInit 是 QEMU 无 scanout
+                    // 的 640x480 占位 surface，guest 图形就绪后由 desktop-resize
+                    // 通知真实尺寸（前提：客户端已订阅 enc=-223，本次已修复）
+                    appendLog(
+                        "[vnc] 服务器初始尺寸 ${client.serverInitWidth}x${client.serverInitHeight}" +
+                            "（模板期望 ${template.screen.width}x${template.screen.height}，" +
+                            "guest 图形就绪后自动切换）"
+                    )
                     var gotFrame = false
                     runCatching {
                         client.frameLoop(
                             onFrame = { gotFrame = true },
                             onEnd = { reason ->
                                 if (reason != null) appendLog("[vnc] 画面流结束: $reason")
+                            },
+                            onResize = { nw, nh ->
+                                appendLog("[vnc] guest 扫描输出就绪，画面尺寸 → ${nw}x${nh}")
+                                FileLogger.i("vnc", "desktop-resize ${nw}x${nh} (${template.id})")
                             },
                         )
                     }.onFailure { appendLog("[vnc] 画面流异常退出: ${it.message}") }

@@ -57,7 +57,13 @@ class RfbClientTest {
         val ver = ByteArray(12); readFully(ins, ver)
         out.write(byteArrayOf(1, 1)); out.flush() // 1 个安全类型: None
         out.writeInt(0); out.flush()               // SecurityResult = OK
-        ins.read()                                  // ClientInit
+        // v0.3.3 修正：客户端上行 = 版本(12) + 安全类型选择(1) + ClientInit(1)。
+        // 旧代码只 ins.read() 一次（读走的是安全类型选择），ClientInit 滞留流中，
+        // 后续 pf[0] 实际收到 ClientInit(1) ≠ 0 → 断言失败且服务器线程带异常死亡
+        // 未 close socket → 客户端陷入 SO_TIMEOUT(30s) 死循环（v0.3.2 起潜伏，
+        // 正是 v0.3.2 CI build-apk 被取消的原因）。
+        ins.read()                                  // 安全类型选择 = None(1)
+        ins.read()                                  // ClientInit（share flag）
         // ServerInit: 200x100, pixelformat(16), name "T"
         out.write(java.nio.ByteBuffer.allocate(2 + 2 + 16 + 4 + 1)
             .putShort(200).putShort(100)
@@ -115,7 +121,7 @@ class RfbClientTest {
             val buf = ByteArray(20); readFully(ins, buf)
             assertEquals(0, buf[0].toInt()) // SetPixelFormat
             assertEquals(20, buf.size)
-            val enc = ByteArray(8); readFully(ins, enc)
+            val enc = ByteArray(12); readFully(ins, enc)
             assertEquals(2, enc[0].toInt()) // SetEncodings
             val fbu = ByteArray(10); readFully(ins, fbu)
             assertEquals(3, fbu[0].toInt()) // FramebufferUpdateRequest
@@ -147,6 +153,101 @@ class RfbClientTest {
         org.junit.Assert.assertNotNull(fb)
         assertEquals(200, fb!!.width)
         assertEquals(100, fb.height)
+        t.join(3000)
+        server.close()
+    }
+
+    @Test
+    fun `SetEncodings subscribes raw and desktop-resize`() {
+        // v0.3.3 核心回归：必须订阅 desktop-resize(-223)，否则 QEMU
+        // (ui/vnc.c vnc_desktop_resize → vnc_has_feature 门控) 在 guest 扫描输出
+        // 就绪后不发尺寸变化 → 位图锁死在连接时的 640x480 占位 surface。
+        val (server, t) = serve { c ->
+            val ins = serverHandshake(c)
+            val pf = ByteArray(20); readFully(ins, pf)
+            assertEquals(0, pf[0].toInt()) // SetPixelFormat
+            // SetEncodings: type(1)+pad(1)+count(u16)+encs(2 x s32) = 12B
+            val head = ByteArray(4); readFully(ins, head)
+            assertEquals(2, head[0].toInt()) // SetEncodings
+            val count = ((head[2].toInt() and 0xFF) shl 8) or (head[3].toInt() and 0xFF)
+            assertEquals(2, count)
+            fun s32(): Int {
+                val b = ByteArray(4); readFully(ins, b)
+                return ((b[0].toInt() and 0xFF) shl 24) or ((b[1].toInt() and 0xFF) shl 16) or
+                    ((b[2].toInt() and 0xFF) shl 8) or (b[3].toInt() and 0xFF)
+            }
+            val e1 = s32(); val e2 = s32()
+            assertTrue("必须订阅 Raw(0)", e1 == 0 || e2 == 0)
+            assertTrue(
+                "必须订阅 desktop-resize(-223)：否则真机早连接时画面永久锁死 640x480 占位 surface",
+                e1 == -223 || e2 == -223,
+            )
+            c.close()
+        }
+        val client = RfbClient()
+        assertTrue(client.connect(server.localPort, 100, 100))
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeout(5000) {
+                // 触发 frameLoop 首轮上行（SetPixelFormat + SetEncodings + FBU）后退出
+                kotlinx.coroutines.withTimeoutOrNull(400) { client.frameLoop(onFrame = { }) }
+            }
+            client.close()
+        }
+        t.join(3000)
+        server.close()
+    }
+
+    @Test
+    fun `frameLoop rebuilds bitmap on desktop-resize pseudo encoding`() {
+        // 模拟真机时序：连接时 guest 未就绪（640x480 占位）→ guest 扫描输出就绪
+        // → desktop-resize 到 432x514 → 全量 Raw 帧。断言位图跟随新尺寸。
+        var resizedCb: Pair<Int, Int>? = null
+        val (server, t) = serve { c ->
+            val ins = serverHandshake(c)
+            val pf = ByteArray(20); readFully(ins, pf)
+            val enc = ByteArray(12); readFully(ins, enc) // SetEncodings(2 个编码)
+            val fbu = ByteArray(10); readFully(ins, fbu) // 首轮全量请求
+            val out = java.io.DataOutputStream(java.io.BufferedOutputStream(c.getOutputStream()))
+            // ① 占位期：发送 640x480 "空"帧（全黑）
+            out.write(byteArrayOf(0, 0)); out.writeShort(1)
+            out.writeShort(0); out.writeShort(0); out.writeShort(640); out.writeShort(480)
+            out.writeInt(0)
+            out.write(ByteArray(640 * 480 * 4)); out.flush()
+            // 等客户端消化占位帧并发出增量请求
+            val fbu2 = ByteArray(10); readFully(ins, fbu2)
+            // ② guest 就绪：desktop-resize 伪编码（无像素数据）
+            out.write(byteArrayOf(0, 0)); out.writeShort(1)
+            out.writeShort(0); out.writeShort(0); out.writeShort(432); out.writeShort(514)
+            out.writeInt(-223); out.flush()
+            // ③ 新尺寸全量 Raw 帧（非黑像素触发 frameHasContent）
+            val w = 432; val h = 514
+            out.write(byteArrayOf(0, 0)); out.writeShort(1)
+            out.writeShort(0); out.writeShort(0); out.writeShort(w); out.writeShort(h)
+            out.writeInt(0)
+            val px = ByteArray(w * h * 4)
+            for (i in 0 until w * h) {
+                px[i * 4] = 0x33.toByte(); px[i * 4 + 1] = 0x44.toByte(); px[i * 4 + 2] = 0xBB.toByte()
+            }
+            out.write(px); out.flush()
+            Thread.sleep(800)
+            c.close()
+        }
+        val client = RfbClient()
+        assertTrue(client.connect(server.localPort, 640, 480))
+        assertEquals(200, client.serverInitWidth)
+        assertEquals(100, client.serverInitHeight)
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeout(5000) {
+                client.frameLoop(onResize = { w, h -> resizedCb = w to h })
+            }
+        }
+        assertEquals("desktop-resize 回调必须携带新尺寸", 432 to 514, resizedCb)
+        val fb = client.framebuffer
+        org.junit.Assert.assertNotNull(fb)
+        assertEquals("位图必须跟随 guest 扫描输出尺寸（真机右侧黑条根因）", 432, fb!!.width)
+        assertEquals(514, fb.height)
+        assertTrue(client.frameHasContent)
+        client.close()
         t.join(3000)
         server.close()
     }

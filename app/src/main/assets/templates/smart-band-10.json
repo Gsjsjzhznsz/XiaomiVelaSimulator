@@ -27,16 +27,18 @@
     "ambient_light"
   ],
   "qemu": {
-    "machine": "mps2-an500",
-    "cpu": "cortex-m7",
+    "machine": "virt",
+    "cpu": "cortex-a7",
     "smp": 1,
-    "memoryMb": 16,
-    "kernel": "openvela-mps2-an500-nsh.elf",
-    "extraArgs": ""
+    "memoryMb": 256,
+    "kernel": "openvela-qemu-armv7a-full.elf",
+    "extraArgs": "",
+    "touchInput": true,
+    "autoCommand": "lvgldemo"
   },
   "ui": {
     "accentColor": "#FF6900",
     "watchfaceStyle": "digital"
   },
-  "note": "屏幕/硬件参数依据公开资料整理，均为可编辑预设；仿真参数决定 QEMU 启动配置。"
+  "note": "屏幕/硬件参数依据公开资料整理，均为可编辑预设；仿真参数决定 QEMU 启动配置。v0.3.3 起全机型统一使用 qemu-armv7a 图形固件（LVGL+virtio-gpu+触摸），显示分辨率按本模板屏幕参数注入 virtio-gpu（宽度向上对齐 16 像素）。"
 }
