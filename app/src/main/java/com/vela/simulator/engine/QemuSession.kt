@@ -35,6 +35,16 @@ class QemuSession(
     private val _ports = MutableStateFlow(Ports(0, 0))
     val ports: StateFlow<Ports> = _ports
 
+    /** v2.1.1: guest 扫描输出是否已就绪（desktop-resize 到达 或 ServerInit 即模板尺寸）。
+     *  早连接时 QEMU 处于无 scanout 占位 surface（"Display output is not active."），
+     *  UI 层据此持续显示启动进度而非把占位帧当画面展示。 */
+    private val _scanoutReady = MutableStateFlow(false)
+    val scanoutReady: StateFlow<Boolean> = _scanoutReady
+
+    /** v2.1.1: 启动阶段文案（驱动“画面”页启动进度层）。空串 = 不在启动流程 */
+    private val _bootPhase = MutableStateFlow("")
+    val bootPhase: StateFlow<String> = _bootPhase
+
     data class Ports(val serial: Int, val vnc: Int)
 
     val console = SerialConsole()
@@ -56,7 +66,9 @@ class QemuSession(
 
     private var pendingSerial = ""
 
-    /** 追加一条完整日志行 */
+    /** v2.1.1: vapp 自动命令重试次数（防慢机丢命令，最多 2 次） */
+    private var autoRetryCount = 0
+
     fun appendLog(line: String) {
         logLines.value = (logLines.value + line).takeLast(800)
         FileLogger.sessionLine(line)
@@ -89,14 +101,44 @@ class QemuSession(
         val tail = pendingSerial + _consoleLines.value.takeLast(2).joinToString(" ")
         if (!tail.contains("nsh>")) return
         autoCommandSent = true
+        _bootPhase.value = "已连接系统控制台，执行启动命令"
         val cmds = cmd.split(';').map { it.trim() }.filter { it.isNotEmpty() }
         appendLog("[vela] 检测到 NSH，自动执行 ${cmds.size} 条命令")
         scope?.launch {
             cmds.forEachIndexed { i, c ->
                 if (i > 0) delay(2500) else delay(1200)
+                if (i == 1) _bootPhase.value = "挂载数据盘，启动 vapp 应用"
                 appendLog("[vela] 自动命令: $c")
                 runCatching { console.sendLine(c) }
                     .onFailure { appendLog("[vela] 自动命令发送失败: ${it.message}") }
+            }
+            autoCommandWatchdog(cmds)
+        }
+    }
+
+    /**
+     * v2.1.1: 自动命令看门狗。低端真机 TCG 引导可能远慢于桌面（nsh 提示符
+     * 出现前的输出在串口门控下不会丢，但极慢设备上 mount/vapp 偶发无响应），
+     * 90s 后仍无扫描输出且串口日志中无 vapp 启动痕迹时，自动补发一轮命令
+     * （最多 2 次），消除“黑屏等到底”的死等。
+     */
+    private fun autoCommandWatchdog(cmds: List<String>) {
+        scope?.launch {
+            repeat(2) {
+                delay(90_000)
+                if (_state.value != State.RUNNING || _scanoutReady.value) return@launch
+                if (autoRetryCount >= 2) return@launch
+                val vappStarted = _consoleLines.value.any {
+                    it.contains("nxtask_activate: vapp") || it.contains("[vapp]")
+                }
+                if (vappStarted) return@launch
+                autoRetryCount++
+                appendLog("[vela] 长时间无图形输出（可能命令未被 guest 执行），自动重试第 $autoRetryCount 次")
+                _bootPhase.value = "引导较慢，自动重试启动命令（第 $autoRetryCount 次）"
+                cmds.forEachIndexed { i, c ->
+                    if (i > 0) delay(2500)
+                    runCatching { console.sendLine(c) }
+                }
             }
         }
     }
@@ -113,6 +155,9 @@ class QemuSession(
         _state.value = State.BOOTING
         _exitCode.value = null
         autoCommandSent = false
+        autoRetryCount = 0
+        _scanoutReady.value = false
+        _bootPhase.value = "等待系统控制台就绪"
         logLines.value = listOf("[vela] 启动 ${template.name}")
         FileLogger.beginSessionLog(template.name)
         FileLogger.i("session", "开始启动会话 template=${template.id} machine=${template.qemu.machine}")
@@ -200,14 +245,15 @@ class QemuSession(
         // 连接成功后仍会继续重连 40 次，反复拆建串口丢失启动期输出。
         sc.launch {
             var connected = false
-            for (i in 1..40) { // 最多 ~20s
+            for (i in 1..120) { // v2.1.1: 最多 ~60s（低端真机上 QEMU 进程冷启动也可能较慢）
                 delay(500)
+                if (_state.value != State.RUNNING) return@launch
                 if (console.connect(plan.serialPort)) { connected = true; break }
             }
             if (connected) {
                 appendLog("[serial] 已连接串口 tcp:${plan.serialPort}")
             } else {
-                appendLog("[serial] 串口连接失败")
+                appendLog("[serial] 串口连接失败（60s 超时）")
             }
         }
 
@@ -249,6 +295,13 @@ class QemuSession(
                     val client = connected
                     if (client == null) return@launch // 会话已结束
                     vnc = client
+                    // v2.1.1: ServerInit 即为模板期望尺寸 => 连接时扫描输出已就绪
+                    //（晚连接/占位与真实尺寸相同两种情形），直接判定图形就绪
+                    if (client.serverInitWidth == template.screen.width &&
+                        client.serverInitHeight == template.screen.height) {
+                        _scanoutReady.value = true
+                        _bootPhase.value = ""
+                    }
                     appendLog(
                         "[vnc] 已连接 127.0.0.1:${plan.vncPort}" +
                             if (n > 1) "（第 $rounds 轮，经 $n 次尝试）" else ""
@@ -271,6 +324,8 @@ class QemuSession(
                             onResize = { nw, nh ->
                                 appendLog("[vnc] guest 扫描输出就绪，画面尺寸 → ${nw}x${nh}")
                                 FileLogger.i("vnc", "desktop-resize ${nw}x${nh} (${template.id})")
+                                _scanoutReady.value = true
+                                _bootPhase.value = ""
                             },
                         )
                     }.onFailure { appendLog("[vnc] 画面流异常退出: ${it.message}") }
@@ -279,6 +334,7 @@ class QemuSession(
                     // 出过画面说明图形会话已建立；断开多为 guest 退出/会话停止，不再重连
                     if (gotFrame || _state.value != State.RUNNING) return@launch
                     appendLog("[vnc] guest 图形尚未就绪（scanout 竞争），2s 后重连")
+                    _bootPhase.value = "图形栈启动中，等待扫描输出…"
                     delay(2000)
                 }
             }

@@ -151,4 +151,31 @@ class QemuArgsBuilderTest {
         assertFalse(plan.command.contains("virtio-tablet-device"))
         assertEquals(0, plan.vncPort % 1) // vncPort 有效
     }
+
+    @Test
+    fun `raw boot template skips xres alignment`() {
+        // v2.1.1: raw 引导（vapp 固件）guest 自选扫描输出尺寸 —— 注入原始分辨率，
+        // 不做 16 像素对齐：占位 surface（对齐宽）与 guest scanout（原始宽）不同，
+        // desktop-resize 才会触发，App 的"图形就绪"判定依赖该事件
+        val images = newImagesDir("nuttx.bin")
+        File(images, "data.img").writeBytes(ByteArray(64))
+        val base = virtTemplate(kernel = "nuttx.bin")
+        val t = base.copy(
+            qemu = base.qemu.copy(
+                bootMode = DeviceTemplate.QemuSpec.BOOT_RAW,
+                entryAddr = 0x6002e0,
+                dataImg = "data.img",
+            ),
+        )
+        val plan = QemuArgsBuilder.build(
+            t, images,
+            runtimePrefixUsr = File("/tmp"), qemuBin = File("/tmp/qemu-system-arm"),
+        )
+        val dev = plan.command[plan.command.indexOf("-device") + 1]
+        assertEquals("virtio-gpu-device,xres=466,yres=466", dev)
+        // raw 引导：loader 设备 + 显式 PC 入口，而非 -kernel
+        assertTrue(plan.command.contains("-device"))
+        assertTrue(plan.command.none { it == "-kernel" })
+        assertTrue(plan.command.any { it.startsWith("loader,file=") })
+    }
 }

@@ -53,11 +53,8 @@ import com.vela.simulator.ui.theme.VelaSurfaceHigh
 import android.widget.Toast
 import androidx.compose.runtime.mutableLongStateOf
 
-/** QEMU 无 scanout 时的默认占位 surface 尺寸（"Display output is not active."） */
-private val BOOT_PLACEHOLDER_SIZE = 640 to 480
-
-/** 启动遮罩最长停留：超过后直接露出实际画面（即使仍是占位），避免无限遮盖 */
-private const val BOOT_OVERLAY_TIMEOUT_MS = 20_000L
+/** 启动遮罩最长停留：低端真机 TCG 引导+vapp 启动可达数分钟，超时后露出实际画面 */
+private const val BOOT_OVERLAY_TIMEOUT_MS = 240_000L
 
 /** 运行页：串口 nsh 控制台 + VNC 帧缓冲画面 双视图 */
 @Composable
@@ -101,10 +98,15 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
     }
 
     // v0.3.3 启动遮罩：App 早于 guest 引导完成就连上 VNC，此时 QEMU 是无 scanout
-    // 的 640x480 占位 surface（"Display output is not active."，用户实机截图
-    // vela_shot_20260922_160902 取证），观感像“没有系统”。在位图仍为占位尺寸
-    // 且运行未超 20s 期间，叠加「系统启动中」提示层；guest 扫描输出就绪
-    // （desktop-resize 到模板分辨率）或超时后自动消失。
+    // 的占位 surface（"Display output is not active."，用户实机截图
+    // vela_shot_20260922_160902 取证），观感像“没有系统”。
+    // v2.1.1 重做：占位判定改用会话级 scanoutReady（desktop-resize 到达或
+    // ServerInit 即模板尺寸）。原实现比对 640x480 —— 但 xres/yres 注入后
+    // 占位 surface 是模板分辨率（QEMU 10），640x480 永不匹配 → 遮罩立刻消失，
+    // 用户直接看到占位帧文字并误认为“没有系统”（真机反馈 display output
+    // is not active 的根因之一）。遮罩内显示实时启动阶段与已用时。
+    val scanoutReady = session?.scanoutReady?.collectAsState()?.value ?: false
+    val bootPhase = session?.bootPhase?.collectAsState()?.value ?: ""
     val runningAt = remember(session, state) {
         if (state == QemuSession.State.RUNNING) System.currentTimeMillis() else 0L
     }
@@ -112,12 +114,9 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
     LaunchedEffect(runningAt) {
         while (runningAt > 0) { nowMs = System.currentTimeMillis(); kotlinx.coroutines.delay(250) }
     }
-    val fbSize = vncFrame?.second?.let { it.width to it.height }
-    val onPlaceholder = fbSize == null || fbSize == BOOT_PLACEHOLDER_SIZE
     val bootElapsed = if (runningAt > 0) nowMs - runningAt else Long.MAX_VALUE
     val showBootOverlay = state == QemuSession.State.RUNNING &&
-        (session?.vnc?.frameVersion?.get() ?: 0) > 0 && onPlaceholder &&
-        bootElapsed < BOOT_OVERLAY_TIMEOUT_MS
+        !scanoutReady && bootElapsed < BOOT_OVERLAY_TIMEOUT_MS
 
     Column(modifier.fillMaxSize()) {
         // 顶栏
@@ -220,19 +219,27 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
-                                        "系统启动中…",
+                                        "系统启动中…  ${bootElapsed / 1000}s",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = Color.White,
                                     )
                                     Spacer(Modifier.height(8.dp))
+                                    if (bootPhase.isNotEmpty()) {
+                                        Text(
+                                            bootPhase,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Color(0xFFFFB269),
+                                        )
+                                        Spacer(Modifier.height(6.dp))
+                                    }
                                     Text(
-                                        "图形栈就绪后自动显示（约 5-20 秒，与真机开机体验一致）",
+                                        "低端真机首次引导较慢，图形就绪后自动显示画面",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color(0xFFB8B8C2),
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        "长时间停留请切「控制台」查看串口日志",
+                                        "想看引导日志请切「控制台」页",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color(0xFF8A8A96),
                                     )

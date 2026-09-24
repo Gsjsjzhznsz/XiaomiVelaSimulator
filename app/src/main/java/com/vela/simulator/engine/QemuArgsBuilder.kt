@@ -96,7 +96,13 @@ object QemuArgsBuilder {
                 // VNC 表面/guest 帧缓冲/触摸三者严格一致。
                 val xres = template.screen.width.coerceIn(64, 4096)
                 val yres = template.screen.height.coerceIn(64, 4096)
-                val xr = (xres + 15) / 16 * 16
+                // v2.1.1: raw 引导模板（vapp 固件）不做 16 像素对齐 —— 对齐会让
+                // 占位 surface（对齐后宽度）与 guest 实际扫描输出（原始宽度）相同，
+                // desktop-resize 永不触发，App 的“图形就绪”判定失效；实测注入
+                // 466x466 时 QEMU 占位 surface 为 480x466，guest scanout 就绪后
+                // resize 到 466x466，触摸归一化按 resize 后实际尺寸计算，无偏差。
+                // 对齐逻辑仅为旧 full 固件（ELF 引导，guest 跟随宿主尺寸）保留。
+                val xr = if (q.bootMode == DeviceTemplate.QemuSpec.BOOT_RAW) xres else (xres + 15) / 16 * 16
                 args += listOf("-device", "virtio-gpu-device,xres=$xr,yres=$yres")
                 // 触摸输入（v0.3.0 修正为 mmio 总线: NuttX 无 virtio-pci 驱动）
                 // VNC PointerEvent(绝对坐标) → virtio-tablet → guest /dev/input0

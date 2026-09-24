@@ -1,18 +1,18 @@
 {
   "id": "vela-vapp-demo",
-  "name": "Vela vApp 演示机 (内置固件)",
+  "name": "Vela vApp 演示 · 圆表 (内置固件)",
   "brand": "Xiaomi",
   "category": "watch",
   "releaseYear": 2026,
   "os": "Xiaomi VELA OS (NuttX + QuickJS + LVGL)",
   "screen": {
-    "shape": "rect",
-    "sizeInch": 8.0,
-    "width": 1280,
-    "height": 800,
-    "dpi": 160,
-    "bezelPx": 6,
-    "bezelColor": "#101018"
+    "shape": "round",
+    "sizeInch": 1.43,
+    "width": 466,
+    "height": 466,
+    "dpi": 326,
+    "bezelPx": 10,
+    "bezelColor": "#1C1C1E"
   },
   "hardware": {
     "cpuArch": "Cortex-A15 (虚拟化)",
@@ -20,7 +20,7 @@
     "storageMb": 32,
     "batteryMah": null
   },
-  "features": ["speaker"],
+  "features": ["speaker", "touch"],
   "qemu": {
     "machine": "virt",
     "cpu": "cortex-a15",
@@ -39,5 +39,5 @@
     "watchfaceStyle": "digital"
   },
   "imageId": "vela-vapp-demo",
-  "note": "v2.1 内置固件演示机：APK 自带 nuttx.bin + data.img（含 com.vela.demo vapp 资源包），QuickJS 解析 rpk → VDOM → LVGL → virtio-gpu 渲染，固件零下载、开箱即跑。引导方式为 raw bin @0x600000 + PC=0x6002e0（QEMU 10/11 的 -kernel ELF loader 对该固件静默失败）。"
+  "note": "v2.1.1 内置固件演示机（466x466 圆表形态，与 Watch S4 同规格屏幕）：APK 自带 nuttx.bin + data.img（含 com.vela.demo vapp 资源包），QuickJS 解析 rpk → VDOM → LVGL → virtio-gpu → VNC 渲染。固件零下载，点部署秒级就绪。引导方式为 raw bin @0x600000 + PC=0x6002e0。注意：真机 TCG 软件模拟引导较慢，点启动后画面页会显示实时引导进度，低端设备首次出画约 1-3 分钟，属正常现象。"
 }
