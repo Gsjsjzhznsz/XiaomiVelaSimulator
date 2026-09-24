@@ -43,10 +43,10 @@ public class VncView extends View {
         paint.setFilterBitmap(false);
     }
 
-    /** Used by LayoutInflater when inflating from XML. Never remove. */
-    public VncView(Context c) { this(c, (Status) null); }
-    public VncView(Context c, AttributeSet attrs) { this(c, (Status) null); }
-    public VncView(Context c, AttributeSet attrs, int defStyle) { this(c, (Status) null); }
+    /** XML inflation entry points. MUST pass attrs to super so android:id etc. are applied. */
+    public VncView(Context c) { super(c); this.cb = null; paint.setFilterBitmap(false); }
+    public VncView(Context c, AttributeSet attrs) { super(c, attrs); this.cb = null; paint.setFilterBitmap(false); }
+    public VncView(Context c, AttributeSet attrs, int defStyle) { super(c, attrs, defStyle); this.cb = null; paint.setFilterBitmap(false); }
 
     /** Attach status callback after XML inflation (constructor keeps cb null). */
     public void setStatus(Status cb) { this.cb = cb; }
