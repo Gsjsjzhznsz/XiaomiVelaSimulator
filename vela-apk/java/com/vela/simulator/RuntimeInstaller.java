@@ -30,6 +30,7 @@ public class RuntimeInstaller {
     private final PowerManager.WakeLock wl;
 
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
+    private String wonBase;
 
     public RuntimeInstaller(Context ctx, Progress cb) {
         this.home = ctx.getFilesDir();
@@ -48,14 +49,13 @@ public class RuntimeInstaller {
         cancelled.set(false);
         wl.acquire(30 * 60 * 1000L);
         try {
-            // 1. mirror race on the Packages index
-            String base = raceMirrors();
-            if (base == null) throw new IOException("所有软件源均不可用");
-            log("竞速选定软件源: " + hostOf(base));
+            // 1. mirror race on the Packages index (winner's body is reused — no second fetch)
+            byte[] idx = raceMirrors();
+            if (idx == null) throw new IOException("所有软件源均不可用");
 
-            // 2. parse index
-            Map<String, Pkg> repo = parseIndex(httpGet(base + "/" + Constants.DIST, 30000));
-            log("软件源索引: " + repo.size() + " 个包");
+            // 2. parse index (body already fetched during mirror race)
+            Map<String, Pkg> repo = parseIndex(idx);
+            log("软件源索引: " + repo.size() + " 个包 (" + hostOf(wonBase) + ")");
 
             // 3. dependency closure
             List<Pkg> order = resolve(repo, Constants.RUNTIME_ROOTS);
@@ -74,7 +74,7 @@ public class RuntimeInstaller {
                 boolean ok = f.isFile() && f.length() == p.size;
                 if (!ok) {
                     log("[" + i + "/" + order.size() + "] 下载 " + p.name + " (" + human(p.size) + ")");
-                    download(base + "/" + p.filename, f, p.size);
+                    download(wonBase + "/" + p.filename, f, p.size);
                 } else {
                     log("[" + i + "/" + order.size() + "] 缓存命中 " + p.name);
                 }
@@ -101,13 +101,13 @@ public class RuntimeInstaller {
 
     // ---------------- mirror race ----------------
 
-    private String raceMirrors() {
+    private byte[] raceMirrors() {
         for (String m : Constants.MIRRORS) {
             if (cancelled.get()) return null;
             try {
                 log("探测软件源 " + hostOf(m) + " ...");
                 byte[] idx = httpGet(m + "/" + Constants.DIST, 15000);
-                if (idx != null && idx.length > 10000) return m;
+                if (idx != null && idx.length > 10000) { wonBase = m; return idx; }
                 log("软件源 " + hostOf(m) + " 索引异常: " + (idx == null ? "null" : idx.length + "B"));
             } catch (Exception e) {
                 log("软件源 " + hostOf(m) + " 不可用: " + brief(e));
@@ -181,6 +181,7 @@ public class RuntimeInstaller {
             byte[] h = new byte[60];
             bb.get(h);
             String name = new String(h, 0, 16, StandardCharsets.US_ASCII).trim();
+            if (name.endsWith("/")) name = name.substring(0, name.length() - 1);   // dpkg ar long-name style: "data.tar.xz/"
             long size = Long.parseLong(new String(h, 48, 10, StandardCharsets.US_ASCII).trim());
             if (size > Integer.MAX_VALUE - 8) throw new IOException("ar entry too large");
             byte[] payload = new byte[(int) size];
@@ -212,17 +213,41 @@ public class RuntimeInstaller {
     }
 
     private void untar(TarArchiveInputStream ti, File prefix) throws IOException {
-        // Termux tar entries look like ./usr/bin/xxx or usr/bin/xxx
+        // Termux debs:  ./data/data/com.termux/files/usr/bin/x
+        // Debian debs:  ./usr/bin/x  or  usr/bin/x
+        // Normalize everything to "usr/..." inside our qemu-prefix.
         File root = prefix.getParentFile(); // filesDir
+        File pfx = new File(root, "qemu-prefix");
         TarArchiveEntry e;
         byte[] buf = new byte[1 << 16];
         while ((e = ti.getNextTarEntry()) != null) {
             String n = e.getName();
             if (n.startsWith("./")) n = n.substring(2);
-            // only deploy the usr/ subtree
-            if (!n.equals("usr") && !n.startsWith("usr/")) continue;
-            File out = new File(root, "qemu-prefix/" + n);
+            String rel;
+            int i = n.indexOf("files/usr/");
+            if (i >= 0) rel = "usr/" + n.substring(i + "files/usr/".length());
+            else if (n.equals("data/data/com.termux/files/usr")) rel = "usr";
+            else if (n.equals("usr") || n.startsWith("usr/")) rel = n;
+            else continue;
+            File out = new File(pfx, rel);
             if (e.isDirectory()) { out.mkdirs(); continue; }
+            if (e.isSymbolicLink()) {
+                out.getParentFile().mkdirs();
+                String target = e.getLinkName();
+                if (target.startsWith("/data/data/com.termux/files/usr/")) {
+                    target = new File(pfx, "usr/" + target.substring("/data/data/com.termux/files/usr/".length())).getAbsolutePath();
+                } else if (target.startsWith("/")) {
+                    continue; // external absolute target — leave to system resolution
+                }
+                try {
+                    out.delete();
+                    android.system.Os.symlink(target, out.getAbsolutePath());
+                } catch (Throwable t) {
+                    File real = new File(pfx, "usr/" + target.replaceAll("^\\./", ""));
+                    if (real.isFile()) copyFile(real, out); // best effort fallback
+                }
+                continue;
+            }
             out.getParentFile().mkdirs();
             FileOutputStream fo = new FileOutputStream(out);
             int r; long total = 0;
@@ -245,7 +270,9 @@ public class RuntimeInstaller {
     private void download(String url, File out, long expect) throws IOException {
         File tmp = new File(out.getParentFile(), out.getName() + ".part");
         HttpURLConnection c = open(url, 30000);
-        c.setRequestProperty("User-Agent", "VelaSimulator/2.0");
+        c.setRequestProperty("User-Agent", "VelaSimulator/2.0");   // BEFORE the request is made
+        int code = c.getResponseCode();
+        if (code >= 400) throw new IOException("HTTP " + code);
         InputStream in = new BufferedInputStream(c.getInputStream(), 1 << 16);
         FileOutputStream fo = new FileOutputStream(tmp);
         byte[] buf = new byte[1 << 16];
@@ -262,7 +289,9 @@ public class RuntimeInstaller {
 
     private byte[] httpGet(String url, int timeoutMs) throws IOException {
         HttpURLConnection c = open(url, timeoutMs);
-        c.setRequestProperty("User-Agent", "VelaSimulator/2.0");
+        c.setRequestProperty("User-Agent", "VelaSimulator/2.0");   // BEFORE the request is made
+        int code = c.getResponseCode();
+        if (code >= 400) throw new IOException("HTTP " + code);
         InputStream in = c.getInputStream();
         ByteArrayOutputStream bo = new ByteArrayOutputStream();
         byte[] buf = new byte[1 << 16];
@@ -272,14 +301,13 @@ public class RuntimeInstaller {
         return bo.toByteArray();
     }
 
+    /** Configure-only: NEVER touches the response here — getResponseCode() would
+     *  fire the request and lock the headers ("Cannot set request property"). */
     private HttpURLConnection open(String url, int timeoutMs) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
-        if (c.getResponseCode() >= 400) {
-            c.getErrorStream().close();
-            throw new IOException("HTTP " + c.getResponseCode());
-        }
+        c.setInstanceFollowRedirects(true);
         return c;
     }
 
