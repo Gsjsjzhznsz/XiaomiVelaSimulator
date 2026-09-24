@@ -32,9 +32,9 @@ a VNC display (virtio-gpu + LVGL).
 - `docs/`          Build notes
 
 ## Firmware build (x86_64 Debian, no sudo)
-    scripts/patches/apply_all.sh      # replay all tree modifications
-    scripts/patches/presets.sh        # libcxx/libcxxabi 17.0.6 + openamp pinned + patches
-    scripts/replay_config.sh          # configure + 86-symbol fragment (kconfiglib)
+    patches/apply_all.sh      # replay all tree modifications
+    patches/presets.sh        # libcxx/libcxxabi 17.0.6 + openamp pinned + patches
+    recipes/replay_config.sh          # configure + 86-symbol fragment (kconfiglib)
     make -j2                          # in /home/z/ov/nuttx
 
 ## GitHub release assets
