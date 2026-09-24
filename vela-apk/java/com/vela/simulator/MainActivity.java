@@ -11,7 +11,9 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends Activity implements RuntimeInstaller.Progress, FirmwareInstaller.Progress {
@@ -35,6 +37,7 @@ public class MainActivity extends Activity implements RuntimeInstaller.Progress,
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        installCrashRecorder();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
 
@@ -54,6 +57,14 @@ public class MainActivity extends Activity implements RuntimeInstaller.Progress,
         installer = new RuntimeInstaller(this, this);
         firmware = new FirmwareInstaller(this, this);
         serial = new SerialClient();
+
+        // XML-inflated VncView has no callback yet — wire it to the console.
+        vnc.setStatus(new VncView.Status() {
+            @Override public void onLine(String s) { log("[vnc] " + s); }
+            @Override public void onConnected(boolean ok) { }
+        });
+
+        replayLastCrash();
 
         btnRuntime.setOnClickListener(v -> asyncTask("安装运行环境", () -> {
             boolean ok = installer.install();
@@ -212,13 +223,47 @@ public class MainActivity extends Activity implements RuntimeInstaller.Progress,
             try {
                 String r = t.run();
                 log("[vela] " + r);
-            } catch (Exception e) {
-                log("[vela] 失败: " + e.getMessage());
+            } catch (Throwable e) {
+                // Throwable, not Exception: NoClassDefFoundError etc. must not kill the process
+                String m = e.getMessage();
+                log("[vela] 失败: " + (m != null ? m : e.getClass().getName()));
             } finally {
                 busy.set(false);
                 runOnUiThread(() -> { btnRuntime.setEnabled(true); btnFirmware.setEnabled(true); });
             }
         }, "task-" + title).start();
+    }
+
+    // ---------------- crash recorder ----------------
+
+    /** Any uncaught crash is persisted; next launch replays it into the console. */
+    private void installCrashRecorder() {
+        final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, err) -> {
+            try {
+                java.io.StringWriter sw = new java.io.StringWriter();
+                err.printStackTrace(new java.io.PrintWriter(sw));
+                java.io.FileWriter w = new java.io.FileWriter(new File(getFilesDir(), "last_crash.txt"), false);
+                w.write("thread=" + thread.getName() + "\n" + sw.toString());
+                w.close();
+            } catch (Exception ignore) {}
+            if (prev != null) prev.uncaughtException(thread, err);
+        });
+    }
+
+    private void replayLastCrash() {
+        try {
+            File f = new File(getFilesDir(), "last_crash.txt");
+            if (!f.isFile()) return;
+            BufferedReader r = new BufferedReader(new FileReader(f));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = r.readLine()) != null) sb.append(line).append('\n');
+            r.close();
+            f.delete();
+            log("[vela] 检测到上次崩溃记录：");
+            log(sb.toString());
+        } catch (Exception ignore) {}
     }
 
     // RuntimeInstaller.Progress (worker thread)

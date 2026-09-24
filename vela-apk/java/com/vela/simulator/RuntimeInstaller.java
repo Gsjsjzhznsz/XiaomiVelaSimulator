@@ -229,7 +229,7 @@ public class RuntimeInstaller {
             while ((r = ti.read(buf)) > 0) { fo.write(buf, 0, r); total += r; }
             fo.close();
             int mode = e.getMode() & 0777;
-            if (mode != 0) out.setReadable(true); out.setWritable(true);
+            if (mode != 0) { out.setReadable(true); out.setWritable(true); }
             if ((mode & 0111) != 0) out.setExecutable(true, false);
         }
     }

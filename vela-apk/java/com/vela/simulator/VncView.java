@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -23,7 +24,7 @@ public class VncView extends View {
 
     public interface Status { void onLine(String s); void onConnected(boolean ok); }
 
-    private final Status cb;
+    private volatile Status cb;
     private Thread worker;
     private volatile boolean stop;
 
@@ -41,6 +42,14 @@ public class VncView extends View {
         this.cb = cb;
         paint.setFilterBitmap(false);
     }
+
+    /** Used by LayoutInflater when inflating from XML. Never remove. */
+    public VncView(Context c) { this(c, (Status) null); }
+    public VncView(Context c, AttributeSet attrs) { this(c, (Status) null); }
+    public VncView(Context c, AttributeSet attrs, int defStyle) { this(c, (Status) null); }
+
+    /** Attach status callback after XML inflation (constructor keeps cb null). */
+    public void setStatus(Status cb) { this.cb = cb; }
 
     /** qemu -vnc 127.0.0.1:N  ->  tcp port 5900 + N */
     public void connect(int display) {
