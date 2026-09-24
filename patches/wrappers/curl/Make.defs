@@ -1,0 +1,8 @@
+############################################################################
+# external/curl/Make.defs
+############################################################################
+
+ifneq ($(CONFIG_LIB_CURL),)
+CONFIGURED_APPS += $(APPDIR)/external/curl
+CFLAGS += ${INCDIR_PREFIX}"$(APPDIR)/external/curl/include"
+endif

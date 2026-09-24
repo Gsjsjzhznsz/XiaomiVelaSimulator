@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- watch body -->
+    <path android:fillColor="#2d2d2d"
+        android:pathData="M34,26 h40 a8,8 0 0 1 8,8 v40 a8,8 0 0 1 -8,8 h-40 a8,8 0 0 1 -8,-8 v-40 a8,8 0 0 1 8,-8 z"/>
+    <path android:fillColor="#3d3d3d" android:pathData="M42,18 h24 v8 h-24 z M42,82 h24 v8 h-24 z"/>
+    <!-- screen -->
+    <path android:fillColor="#111111" android:pathData="M34,34 h40 v34 h-40 z"/>
+    <!-- V letter in vela orange -->
+    <path android:strokeColor="#ff6700" android:strokeWidth="6" android:strokeLineCap="round"
+        android:pathData="M45,42 L54,60 L63,42"/>
+    <!-- running dot -->
+    <path android:fillColor="#ff6700" android:pathData="M52,68 a2,2 0 1 0 4,0 a2,2 0 1 0 -4,0"/>
+</vector>

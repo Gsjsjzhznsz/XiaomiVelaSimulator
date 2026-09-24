@@ -1,0 +1,18 @@
+diff --git a/Makefile b/Makefile
+index 920a2e6..6a49755 100755
+--- a/Makefile
++++ b/Makefile
+@@ -58,6 +58,13 @@ MAINSRC := $(wildcard $(MAINSRC))
+ ifeq ($(CONFIG_QUICKAPP_VAPP),y)
+ # Add vapp sources after wildcard (wildcard fails with relative/VPATH paths)
+ # Use CURDIR-relative paths to match Application.mk SUFFIX pattern
++CSRCS += openrt/vrpk.c
++CSRCS += openrt/vhost.c
++CSRCS += openrt/vrender.c
++CSRCS += openrt/vstubs.c
++MAINSRC += openrt/vapp_main.c
++# openrt includes zlib.h (vrpk) and friends
++CFLAGS += ${INCDIR_PREFIX}"$(APPDIR)/system/zlib/zlib"
+ endif
+ NOEXPORTSRCS = $(ASRCS)$(CSRCS)$(CXXSRCS)$(MAINSRC)
+ 

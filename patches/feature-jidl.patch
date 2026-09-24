@@ -1,0 +1,66 @@
+diff --git a/Make.defs b/Make.defs
+index 0d1e505..62e7cb5 100644
+--- a/Make.defs
++++ b/Make.defs
+@@ -24,6 +24,12 @@ CXXFLAGS += ${INCDIR_PREFIX}$(APPDIR)/frameworks/runtimes/feature/include
+ CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/frameworks/runtimes/feature/include
+ CXXFLAGS += ${INCDIR_PREFIX}$(APPDIR)/external/protobuf-c/protobuf-c
+ CFLAGS   += ${INCDIR_PREFIX}$(APPDIR)/external/protobuf-c/protobuf-c
++# parent layer: feature_exports.h includes <protobuf-c/protobuf-c.h>
++CXXFLAGS += ${INCDIR_PREFIX}$(APPDIR)/external/protobuf-c
++CFLAGS   += ${INCDIR_PREFIX}$(APPDIR)/external/protobuf-c
++# net_utils.cpp includes <curl/curl.h>
++CXXFLAGS += ${INCDIR_PREFIX}$(APPDIR)/external/curl/include
++CFLAGS   += ${INCDIR_PREFIX}$(APPDIR)/external/curl/include
+ ifeq ($(CONFIG_FEATURE_FRAMEWORK),y)
+ include $(APPDIR)/frameworks/runtimes/feature/modules/Make.defs
+ endif
+diff --git a/modules/Kconfig b/modules/Kconfig
+index 17af07a..d2ade23 100644
+--- a/modules/Kconfig
++++ b/modules/Kconfig
+@@ -117,6 +117,10 @@ config FEATURE_SYSTEM_MESSAGECHANNEL
+ choice
+ prompt "select the implementation of system.exchange"
+ default FEATURE_SYSTEM_EXCHANGE
++# patched: hide this choice entirely for the vapp firmware build
++# (depends on an always-off symbol); with CONFIG_FEATURE_RUST_MODULES=n
++# neither implementation is selected.
++depends on FEATURE_RUST_MODULES
+ 
+ config FEATURE_SYSTEM_EXCHANGE
+     bool "cpp implementation of system.exchange"
+diff --git a/modules/Module.mk b/modules/Module.mk
+index 9a2baa6..82f1be3 100644
+--- a/modules/Module.mk
++++ b/modules/Module.mk
+@@ -36,14 +36,14 @@ depend::
+ 		$(eval jidl_path=$(word $(i),$(JIDL_PATH))) \
+ 		$(eval out_path=$(word $(i),$(OUT_PATH))) \
+ 		$(eval file_name=$(strip $(basename $(notdir $(word $(i),$(JIDL_PATH))) .jidl))) \
+-		$(APPDIR)/../prebuilts/tools/rust/bin/jidl/jidl_gen_cpp $(jidl_path) --out-dir $(out_path) --header $(file_name).h --source $(file_name).cpp; \
++		true $(jidl_path) --out-dir $(out_path) --header $(file_name).h --source $(file_name).cpp; \
+ 	)
+ 
+ 	$(foreach i,$(shell seq 1 $(words $(JIDL_C_PATH))), \
+ 		$(eval jidl_path=$(word $(i),$(JIDL_C_PATH))) \
+ 		$(eval out_path=$(word $(i),$(OUT_PATH))) \
+ 		$(eval file_name=$(strip $(basename $(notdir $(word $(i),$(JIDL_C_PATH))) .jidl))) \
+-		$(APPDIR)/../prebuilts/tools/rust/bin/jidl/jidl_gen_cpp $(jidl_path) --out-dir $(out_path) --header $(file_name).h --source $(file_name).c; \
++		true $(jidl_path) --out-dir $(out_path) --header $(file_name).h --source $(file_name).c; \
+ 	)
+ 
+ ifeq ($(wildcard $(AJS_FEATURES_REGISTRY_LIST)),)
+diff --git a/src/utils/feature_utils.h b/src/utils/feature_utils.h
+index 8b9456b..9fe1975 100644
+--- a/src/utils/feature_utils.h
++++ b/src/utils/feature_utils.h
+@@ -209,7 +209,7 @@ public:
+         p_ = FeatureInstanceDupValue(other.p_);
+     }
+ 
+-    FeatureArray(const FeatureArray&& other)
++    FeatureArray(FeatureArray&& other)  /* non-const: move mutates source */
+     {
+         p_ = other.p_;
+         other.p_ = nullptr;

@@ -1,0 +1,16 @@
+# frameworks aggregation Kconfig (openvela workspace layout)
+# kconfiglib resolves $(APPSDIR) via environment; relative sources
+# across the apps/frameworks symlink do not work reliably.
+
+source "$(APPSDIR)/frameworks/graphics/uikit/Kconfig"
+source "$(APPSDIR)/frameworks/system/utils/Kconfig"
+# NOTE: utils/Kconfig osource's uv/Kconfig; feature/Kconfig sources
+# feature/modules/Kconfig. Do NOT source nested files here twice or
+# choice symbols end up "defined with a prompt outside the choice".
+source "$(APPSDIR)/frameworks/runtimes/quickapp/Kconfig"
+source "$(APPSDIR)/frameworks/runtimes/ash/Kconfig"
+source "$(APPSDIR)/frameworks/runtimes/feature/Kconfig"
+source "$(APPSDIR)/frameworks/runtimes/services/am/Kconfig"
+source "$(APPSDIR)/frameworks/runtimes/services/pm/Kconfig"
+source "$(APPSDIR)/frameworks/runtimes/services/wm/Kconfig"
+source "$(APPSDIR)/frameworks/runtimes/services/system_server/Kconfig"

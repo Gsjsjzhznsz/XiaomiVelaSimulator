@@ -1,0 +1,8 @@
+############################################################################
+# external/freetype/freetype/Make.defs
+############################################################################
+
+ifneq ($(CONFIG_LIB_FREETYPE),)
+CONFIGURED_APPS += $(APPDIR)/external/freetype/freetype
+CFLAGS += ${INCDIR_PREFIX}"$(APPDIR)/external/freetype/freetype/include"
+endif

@@ -1,0 +1,234 @@
+diff --git a/boards/arm/qemu/qemu-armv7a/scripts/Make.defs b/boards/arm/qemu/qemu-armv7a/scripts/Make.defs
+index a49e0201..9fb3f02b 100644
+--- a/boards/arm/qemu/qemu-armv7a/scripts/Make.defs
++++ b/boards/arm/qemu/qemu-armv7a/scripts/Make.defs
+@@ -35,6 +35,13 @@ CXXPICFLAGS = $(ARCHPICFLAGS) $(CXXFLAGS)
+ CPPFLAGS := $(ARCHINCLUDES) $(ARCHDEFINES) $(EXTRAFLAGS)
+ AFLAGS := $(CFLAGS) -D__ASSEMBLY__
+ 
++# newlib headers (sandbox: Debian libnewlib-dev unpacked to tools-prefix).
++# Provides wchar.h/fenv.h/uchar.h for libc++ and C99 library shims.
++NEWLIB_SYSINC := -isystem $(TOPDIR)/../tools-prefix/usr/include/newlib
++CFLAGS := $(CFLAGS) $(NEWLIB_SYSINC)
++CXXFLAGS := $(CXXFLAGS) $(NEWLIB_SYSINC)
++CPPFLAGS := $(CPPFLAGS) $(NEWLIB_SYSINC)
++
+ # NXFLAT module definitions
+ 
+ NXFLATLDFLAGS1 = -r -d -warn-common
+diff --git a/drivers/virtio/virtio-gpu.c b/drivers/virtio/virtio-gpu.c
+index f93ce20e..084e63f8 100644
+--- a/drivers/virtio/virtio-gpu.c
++++ b/drivers/virtio/virtio-gpu.c
+@@ -35,6 +35,14 @@
+ 
+ #include "virtio-gpu.h"
+ 
++/* qemu-armv7a runs FLAT: physical address == virtual address.
++ * This fork's arm addrenv layer does not provide the helper for
++ * FLAT configs, so provide the identity mapping here. */
++
++#ifndef up_addrenv_va_to_pa
++#  define up_addrenv_va_to_pa(v) ((uint64_t)(uintptr_t)(v))
++#endif
++
+ /****************************************************************************
+  * Pre-processor Definitions
+  ****************************************************************************/
+@@ -571,6 +579,13 @@ static void virtio_gpu_vsync_loop(FAR void *arg)
+                               info.planeinfo.yoffset == 0 ? 1 : 2);
+       fb_remove_paninfo(&priv->vtable, FB_NO_OVERLAY);
+     }
++  else
++    {
++      /* Single-buffer users (LVGL) never pan, so without this the
++       * host display would never see scanout/flush requests. */
++
++      virtio_gpu_flush_output(&priv->vtable, 1);
++    }
+ }
+ 
+ /****************************************************************************
+diff --git a/drivers/virtio/virtio-mmio.c b/drivers/virtio/virtio-mmio.c
+index b091dccf..cfdc525f 100644
+--- a/drivers/virtio/virtio-mmio.c
++++ b/drivers/virtio/virtio-mmio.c
+@@ -38,6 +38,14 @@
+ #include <nuttx/virtio/virtio.h>
+ #include <nuttx/virtio/virtio-mmio.h>
+ 
++/* qemu-armv7a runs FLAT: physical address == virtual address.
++ * This fork's arm addrenv layer does not provide the helper for
++ * FLAT configs, so provide the identity mapping here. */
++
++#ifndef up_addrenv_va_to_pa
++#  define up_addrenv_va_to_pa(v) ((uint64_t)(uintptr_t)(v))
++#endif
++
+ /****************************************************************************
+  * Pre-processor Definitions
+  ****************************************************************************/
+@@ -227,10 +235,10 @@ static void virtio_mmio_set_status(FAR struct virtio_device *vdev,
+ static uint8_t virtio_mmio_get_status(FAR struct virtio_device *vdev);
+ static void virtio_mmio_write_config(FAR struct virtio_device *vdev,
+                                      uint32_t offset, void *dst,
+-                                     size_t length);
++                                     int length); /* openamp dispatch sig */
+ static void virtio_mmio_read_config(FAR struct virtio_device *vdev,
+                                     uint32_t offset, FAR void *dst,
+-                                    size_t length);
++                                    int length); /* openamp dispatch sig */
+ static uint64_t virtio_mmio_get_features(FAR struct virtio_device *vdev);
+ static void virtio_mmio_set_features(FAR struct virtio_device *vdev,
+                                      uint64_t features);
+@@ -562,7 +570,7 @@ static uint8_t virtio_mmio_get_status(FAR struct virtio_device *vdev)
+ 
+ static void virtio_mmio_write_config(FAR struct virtio_device *vdev,
+                                      uint32_t offset, void *src,
+-                                     size_t length)
++                                     int length)
+ {
+   FAR struct virtio_mmio_device_s *vmdev =
+     (FAR struct virtio_mmio_device_s *)vdev;
+@@ -616,7 +624,7 @@ byte_write:
+ 
+ static void virtio_mmio_read_config(FAR struct virtio_device *vdev,
+                                     uint32_t offset, FAR void *dst,
+-                                    size_t length)
++                                    int length)
+ {
+   FAR struct virtio_mmio_device_s *vmdev =
+     (FAR struct virtio_mmio_device_s *)vdev;
+@@ -769,7 +777,7 @@ static int virtio_mmio_interrupt(int irq, FAR void *context, FAR void *arg)
+                                 i, vq, vq->callback);
+             }
+ 
+-          if (vq->callback != NULL && virtqueue_nused(vq) > 0)
++          if (vq->callback != NULL)
+             {
+               sched_note_printf(0xff, LOG_INFO, "s_mmio, cb %p\n",
+                                 vq->callback);
+diff --git a/drivers/virtio/virtio.c b/drivers/virtio/virtio.c
+index a8eebfe4..ece1de6b 100644
+--- a/drivers/virtio/virtio.c
++++ b/drivers/virtio/virtio.c
+@@ -101,7 +101,9 @@ FAR void *virtio_get_next_buffer(FAR struct virtqueue *vq, uint16_t idx,
+     }
+ 
+   VRING_INVALIDATE(&vq->vq_ring.desc[next], sizeof(vq->vq_ring.desc[next]));
+-  buffer = virtqueue_phys_to_virt(vq, vq->vq_ring.desc[next].addr);
++  /* virtqueue_phys_to_virt() was dropped in this fork; FLAT build:
++         * PA == VA, so the descriptor address is used directly. */
++  buffer = (FAR void *)(uintptr_t)vq->vq_ring.desc[next].addr;
+   if (next_len != NULL)
+     {
+       *next_len = vq->vq_ring.desc[next].len;
+@@ -134,7 +136,7 @@ ssize_t virtio_get_buffers(FAR struct virtqueue *vq,
+   vb[0].buf = buf;
+   vb[0].len = len;
+ 
+-  head = vq->vq_ring.used->ring[idx].u.id;
++  head = vq->vq_ring.used->ring[idx].id; /* no anonymous union 'u' */
+   for (i = 1, idx = head; ; i++)
+     {
+       buf = virtio_get_next_buffer(vq, idx, &idx, &len);
+diff --git a/include/nuttx/net/usrsock.h b/include/nuttx/net/usrsock.h
+index 7309e147..fff05c37 100644
+--- a/include/nuttx/net/usrsock.h
++++ b/include/nuttx/net/usrsock.h
+@@ -314,8 +314,14 @@ static inline_function void usrsock_unlock(void)
+  * Description:
+  *   Wait for sem while temporarily releasing the usrsock lock.
+  *
++ * NOTE: net_sem_timedwait2() is declared by net.h only when the IP
++ * stack is enabled; guard this inline so that builds without
++ * CONFIG_NET can still include this header (e.g. drivers_initialize.c).
++ *
+  ****************************************************************************/
+ 
++#if defined(CONFIG_NET) && \
++    (defined(CONFIG_NET_IPv4) || defined(CONFIG_NET_IPv6))
+ static inline_function int
+ usrsock_sem_timedwait(FAR sem_t *sem, bool interruptible,
+                       unsigned int timeout)
+@@ -323,6 +329,7 @@ usrsock_sem_timedwait(FAR sem_t *sem, bool interruptible,
+   return net_sem_timedwait2(sem, interruptible, timeout, &g_usrsock_lock,
+                             NULL);
+ }
++#endif
+ 
+ /****************************************************************************
+  * Name: usrsock_mutex_timedlock
+diff --git a/include/nuttx/virtio/virtio.h b/include/nuttx/virtio/virtio.h
+index cae5bf93..1d76ad68 100644
+--- a/include/nuttx/virtio/virtio.h
++++ b/include/nuttx/virtio/virtio.h
+@@ -177,12 +177,45 @@ static inline_function void virtqueue_kick_lock(FAR struct virtqueue *vq,
+   spin_unlock_irqrestore(lock, flags);
+ }
+ 
++/****************************************************************************
++ * Name: virtio_kmm_alloc_buf
++ *
++ * The 4-argument virtio_alloc_buf() of the original NuttX API no longer
++ * has an implementation in this fork (the name now resolves to the
++ * open-amp inline helper with a different signature). Allocate directly
++ * from the kmm heap instead; on FLAT builds VA == PA, which is what the
++ * virtio host side requires.
++ ****************************************************************************/
++
++static inline_function int virtio_kmm_alloc_buf(FAR struct virtio_device *vdev,
++                                                FAR void **buf, size_t size,
++                                                size_t align)
++{
++  FAR void *p;
++
++  (void)vdev;
++
++  if (align < sizeof(void *))
++    {
++      align = sizeof(void *);
++    }
++
++  p = kmm_memalign(align, size);
++  if (p == NULL)
++    {
++      return -ENOMEM;
++    }
++
++  *buf = p;
++  return 0;
++}
++
+ static inline_function FAR void *
+ virtio_malloc_buf(FAR struct virtio_device *vdev, size_t size, size_t align)
+ {
+   FAR void *buf;
+ 
+-  if (virtio_alloc_buf(vdev, &buf, size, align) < 0)
++  if (virtio_kmm_alloc_buf(vdev, &buf, size, align) < 0)
+     {
+       return NULL;
+     }
+@@ -195,7 +228,7 @@ virtio_zalloc_buf(FAR struct virtio_device *vdev, size_t size, size_t align)
+ {
+   FAR void *buf;
+ 
+-  if (virtio_alloc_buf(vdev, &buf, size, align) < 0)
++  if (virtio_kmm_alloc_buf(vdev, &buf, size, align) < 0)
+     {
+       return NULL;
+     }
+diff --git a/openamp/open-amp.defs b/openamp/open-amp.defs
+index 5c76cfc7..a590aff9 100644
+--- a/openamp/open-amp.defs
++++ b/openamp/open-amp.defs
+@@ -56,7 +56,7 @@ CSRCS += open-amp/lib/remoteproc/remoteproc_virtio.c
+ CSRCS += open-amp/lib/remoteproc/rsc_table_parser.c
+ CSRCS += open-amp/lib/rpmsg/rpmsg.c
+ CSRCS += open-amp/lib/rpmsg/rpmsg_virtio.c
+-CSRCS += open-amp/lib/utils/utilities.c
++# CSRCS += open-amp/lib/utils/utilities.c (not in pinned open-amp commit; vapp does not use it)
+ CSRCS += open-amp/lib/virtio/virtio.c
+ CSRCS += open-amp/lib/virtio/virtqueue.c
+ 

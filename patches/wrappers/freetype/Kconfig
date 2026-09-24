@@ -1,0 +1,3 @@
+config LIB_FREETYPE
+	bool "freetype"
+	default n

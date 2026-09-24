@@ -1,0 +1,11 @@
+config UTILS_CURL
+	bool "curl"
+	default n
+
+if UTILS_CURL
+
+config LIB_CURL
+	bool "curl library"
+	default y
+
+endif

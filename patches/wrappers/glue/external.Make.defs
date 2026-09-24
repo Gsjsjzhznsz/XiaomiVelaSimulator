@@ -1,0 +1,10 @@
+############################################################################
+# external/Make.defs (glue)
+# Chains the openvela external workspace libs into the apps build.
+############################################################################
+
+include $(wildcard $(APPDIR)/external/libpng/Make.defs)
+include $(wildcard $(APPDIR)/external/freetype/freetype/Make.defs)
+include $(wildcard $(APPDIR)/external/yoga/Make.defs)
+include $(wildcard $(APPDIR)/external/protobuf-c/Make.defs)
+include $(wildcard $(APPDIR)/external/curl/Make.defs)

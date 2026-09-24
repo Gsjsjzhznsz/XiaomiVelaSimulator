@@ -1,0 +1,9 @@
+############################################################################
+# external/libpng/Make.defs
+############################################################################
+
+ifneq ($(CONFIG_LIB_PNG),)
+CONFIGURED_APPS += $(APPDIR)/external/libpng
+CFLAGS += ${INCDIR_PREFIX}"$(APPDIR)/external/libpng"
+CFLAGS += ${INCDIR_PREFIX}"$(APPDIR)/system/zlib/zlib"
+endif

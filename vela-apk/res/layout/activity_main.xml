@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#111111">
+
+    <!-- Title -->
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Xiaomi Vela 模拟器 · vapp 运行时"
+        android:textColor="#ffffff"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        android:padding="12dp"
+        android:background="#1a1a1a"/>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <!-- Status card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#1e1e1e"
+                android:padding="10dp">
+
+                <TextView android:id="@+id/st_runtime"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="● QEMU 运行环境：未安装"
+                    android:textColor="#cccccc" android:textSize="14sp"/>
+                <TextView android:id="@+id/st_firmware"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="● Vela 固件：未刷入"
+                    android:textColor="#cccccc" android:textSize="14sp"
+                    android:layout_marginTop="4dp"/>
+                <TextView android:id="@+id/st_vm"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="● 虚拟机：未运行"
+                    android:textColor="#cccccc" android:textSize="14sp"
+                    android:layout_marginTop="4dp"/>
+            </LinearLayout>
+
+            <!-- Action buttons row 1 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="10dp">
+                <Button android:id="@+id/btn_runtime"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/install_runtime"
+                    android:textColor="#ffffff"
+                    android:backgroundTint="#ff6700"/>
+                <Button android:id="@+id/btn_firmware"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/install_firmware"
+                    android:textColor="#ffffff"
+                    android:backgroundTint="#3a6ea5"/>
+            </LinearLayout>
+
+            <!-- Action buttons row 2 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+                <Button android:id="@+id/btn_start"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/start_vm"
+                    android:textColor="#ffffff"
+                    android:backgroundTint="#2e7d32"/>
+                <Button android:id="@+id/btn_stop"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/stop_vm"
+                    android:textColor="#ffffff"
+                    android:backgroundTint="#8a2e2e"/>
+            </LinearLayout>
+
+            <!-- vapp auto boot toggle -->
+            <CheckBox android:id="@+id/cb_autovapp"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="启动后自动挂载数据盘并运行 vapp 演示包"
+                android:textColor="#cccccc" android:textSize="13sp"
+                android:buttonTint="#ff6700"
+                android:checked="true"/>
+
+            <!-- VNC screen -->
+            <com.vela.simulator.VncView
+                android:id="@+id/vnc"
+                android:layout_width="match_parent"
+                android:layout_height="260dp"
+                android:layout_marginTop="6dp"
+                android:background="#000000"/>
+
+            <!-- console input -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+                <EditText android:id="@+id/cmd"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="NSH 命令（如 ls /data）"
+                    android:textColor="#eeeeee" android:textColorHint="#666666"
+                    android:textSize="13sp"
+                    android:inputType="text"
+                    android:imeOptions="actionSend"
+                    android:background="#222222"
+                    android:padding="8dp"/>
+                <Button android:id="@+id/btn_send"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="@string/send"
+                    android:textColor="#ffffff"
+                    android:backgroundTint="#444444"/>
+            </LinearLayout>
+
+            <!-- console log -->
+            <TextView android:id="@+id/console"
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:layout_marginTop="8dp"
+                android:background="#0a0a0a"
+                android:padding="8dp"
+                android:textColor="#9fdf9f"
+                android:textSize="11sp"
+                android:typeface="monospace"
+                android:scrollbars="vertical"
+                android:text=""/>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

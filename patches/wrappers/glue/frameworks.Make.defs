@@ -1,0 +1,8 @@
+############################################################################
+# frameworks/Make.defs (glue)
+# Chains the openvela frameworks workspace into the apps build.
+############################################################################
+
+include $(wildcard $(APPDIR)/frameworks/graphics/Make.defs)
+include $(wildcard $(APPDIR)/frameworks/runtimes/Make.defs)
+include $(wildcard $(APPDIR)/frameworks/system/Make.defs)

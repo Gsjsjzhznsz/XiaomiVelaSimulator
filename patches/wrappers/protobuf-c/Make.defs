@@ -1,0 +1,9 @@
+############################################################################
+# external/protobuf-c/Make.defs
+############################################################################
+
+ifneq ($(CONFIG_PROTOBUF_C),)
+CONFIGURED_APPS += $(APPDIR)/external/protobuf-c
+CFLAGS += ${INCDIR_PREFIX}"$(APPDIR)/external/protobuf-c"
+CFLAGS += ${INCDIR_PREFIX}"$(APPDIR)/external/protobuf-c/protobuf-c"
+endif

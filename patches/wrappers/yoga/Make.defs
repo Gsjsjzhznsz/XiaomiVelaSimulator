@@ -1,0 +1,8 @@
+############################################################################
+# external/yoga/Make.defs
+############################################################################
+
+ifneq ($(CONFIG_LIB_YOGA),)
+CONFIGURED_APPS += $(APPDIR)/external/yoga
+CFLAGS += ${INCDIR_PREFIX}"$(APPDIR)/external/yoga"
+endif

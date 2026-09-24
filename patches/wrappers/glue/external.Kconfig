@@ -1,0 +1,7 @@
+# external aggregation Kconfig (openvela workspace layout)
+
+source "$(APPSDIR)/external/libpng/Kconfig"
+source "$(APPSDIR)/external/freetype/freetype/Kconfig"
+source "$(APPSDIR)/external/yoga/Kconfig"
+source "$(APPSDIR)/external/protobuf-c/Kconfig"
+source "$(APPSDIR)/external/curl/Kconfig"
