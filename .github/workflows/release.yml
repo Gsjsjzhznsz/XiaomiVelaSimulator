@@ -26,8 +26,12 @@ jobs:
         run: chmod +x gradlew
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug
+      - name: Rename APK with version
+        run: |
+          VER=${GITHUB_REF_NAME#v}
+          cp app/build/outputs/apk/debug/app-debug.apk "XiaomiVelaSimulator-${VER}.apk"
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/debug/*.apk
+          files: XiaomiVelaSimulator-*.apk
           fail_on_unmatched_files: true
