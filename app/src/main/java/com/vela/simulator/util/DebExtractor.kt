@@ -30,9 +30,11 @@ object DebExtractor {
         ArArchiveInputStream(arIn).use { ar ->
             while (true) {
                 val entry = ar.nextArEntry ?: break
-                if (entry.name.startsWith("data.tar")) {
+                // v2.1 加固（v2.0.2 同款修复）：新版 dpkg 的 ar 成员名可能带尾斜杠
+                // （如 "data.tar.xz/"），不剥离会让后缀判定落入“未压缩”分支而解析失败
+                val name = entry.name.trimEnd('/')
+                if (name.startsWith("data.tar")) {
                     found = true
-                    val name = entry.name
                     when {
                         name.endsWith(".xz") -> untar(XZCompressorInputStream(ar), destDir, stripPrefix)
                         name.endsWith(".zst") -> untar(ZstdInputStream(ar), destDir, stripPrefix)
@@ -65,11 +67,20 @@ object DebExtractor {
                 if (!out.canonicalPath.startsWith(destCanon)) continue
                 if (e.isSymbolicLink) {
                     out.parentFile?.mkdirs()
+                    // v2.1 加固（v2.0.2 同款修复）：绝对 termux 前缀目标重写到本包
+                    // prefix（如 libglib 的 soname 链接），否则符号链接悬空、qemu 起不来；
+                    // 指向外部系统的绝对目标无法在本前缀内满足，跳过
+                    var link = e.linkName
+                    if (link.startsWith("/data/data/com.termux/files/")) {
+                        link = File(destDir, link.removePrefix("/data/data/com.termux/files/")).absolutePath
+                    } else if (link.startsWith("/")) {
+                        continue
+                    }
                     runCatching {
                         if (out.exists()) out.delete()
                         java.nio.file.Files.createSymbolicLink(
                             out.toPath(),
-                            java.nio.file.Path.of(e.linkName)
+                            java.nio.file.Path.of(link)
                         )
                     }
                     continue

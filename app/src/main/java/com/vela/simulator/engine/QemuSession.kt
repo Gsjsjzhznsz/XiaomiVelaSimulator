@@ -80,6 +80,8 @@ class QemuSession(
      * v0.3.0: 检测 NSH 提示符后自动执行模板命令（如 lvgldemo 启动 LVGL 界面）。
      * 提示符不携带换行，所以同时检查未决缓冲 pendingSerial；命中后延时发送，
      * 确保 shell 已就绪可读。
+     * v2.1: 支持 ";" 分隔的多条命令（如 vapp 固件先 mount 数据盘再启动 vapp），
+     * 逐条间隔 2.5s 发送，确保前一条在 guest 侧执行完毕。
      */
     private fun maybeAutoCommand() {
         val cmd = template.qemu.autoCommand.trim()
@@ -87,11 +89,15 @@ class QemuSession(
         val tail = pendingSerial + _consoleLines.value.takeLast(2).joinToString(" ")
         if (!tail.contains("nsh>")) return
         autoCommandSent = true
-        appendLog("[vela] 检测到 NSH，自动启动界面: $cmd")
+        val cmds = cmd.split(';').map { it.trim() }.filter { it.isNotEmpty() }
+        appendLog("[vela] 检测到 NSH，自动执行 ${cmds.size} 条命令")
         scope?.launch {
-            delay(1200)
-            runCatching { console.sendLine(cmd) }
-                .onFailure { appendLog("[vela] 自动命令发送失败: ${it.message}") }
+            cmds.forEachIndexed { i, c ->
+                if (i > 0) delay(2500) else delay(1200)
+                appendLog("[vela] 自动命令: $c")
+                runCatching { console.sendLine(c) }
+                    .onFailure { appendLog("[vela] 自动命令发送失败: ${it.message}") }
+            }
         }
     }
 
@@ -113,16 +119,18 @@ class QemuSession(
 
         // v0.2.7：启动前内核健康前置校验 —— 残缺/错误页内核（无 ELF 魔数或体积过小）
         // 不再交给 QEMU（此前会直接启动失败/黑屏，用户无法定位原因）
+        // v2.1：raw 引导固件（如 vapp 的 nuttx.bin）不是 ELF，只校验体积下限
         val kernel = File(imagesDir, template.qemu.kernel)
         if (!kernel.exists()) {
             failWith("系统镜像未下载（${template.qemu.kernel}），请到设备详情页下载", null)
             return
         }
-        if (kernel.length() < ImageManager.MIN_KERNEL_BYTES || !ImageManager.isElfFile(kernel)) {
+        val rawBoot = template.qemu.bootMode == DeviceTemplate.QemuSpec.BOOT_RAW
+        if (kernel.length() < ImageManager.MIN_KERNEL_BYTES || (!rawBoot && !ImageManager.isElfFile(kernel))) {
             val mb = String.format(java.util.Locale.US, "%.1f", kernel.length() / 1024.0 / 1024.0)
             FileLogger.w("session", "内核文件异常: ${kernel.name} ${kernel.length()}B, 删除并要求重新下载")
             runCatching { kernel.delete() }
-            failWith("系统镜像损坏（仅 ${mb}MB，非有效 ELF 内核），已清除，请到设备详情页重新下载", null)
+            failWith("系统镜像损坏（仅 ${mb}MB，非有效内核），已清除，请到设备详情页重新下载", null)
             return
         }
 

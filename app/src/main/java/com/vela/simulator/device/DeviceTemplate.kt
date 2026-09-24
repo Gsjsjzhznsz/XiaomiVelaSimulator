@@ -22,6 +22,8 @@ data class DeviceTemplate(
     val features: List<String> = emptyList(),
     val qemu: QemuSpec,
     val ui: UiSpec = UiSpec(),
+    /** 镜像清单条目 id（v2.1）：非空时设备详情页优先使用该固件条目（如 APK 内置的 vapp 演示固件） */
+    val imageId: String = "",
     /** 参数说明（例如"公开资料整理的可编辑预设"） */
     val note: String = "",
 ) {
@@ -65,13 +67,26 @@ data class DeviceTemplate(
         val extraArgs: String = "",
         /** 触摸输入: virt 机器挂载 virtio-tablet-device 绝对指针设备（virtio-mmio），画面视图可触摸 */
         val touchInput: Boolean = true,
-        /** NSH 提示符出现后自动执行的命令（如 lvgldemo 启动图形界面，空 = 不自动执行） */
+        /** NSH 提示符出现后自动执行的命令（如 lvgldemo 启动图形界面，空 = 不自动执行）；多条命令用 ";" 分隔 */
         val autoCommand: String = "",
+        /**
+         * 引导模式（v2.1，vapp 固件新增）：
+         *  - BOOT_ELF: 经 -kernel 直接引导 ELF（旧 openvela 固件，默认，行为不变）；
+         *  - BOOT_RAW: 原始 bin 经 -device loader 装载（QEMU 10/11 的 -kernel ELF
+         *    loader 对 vapp 固件静默失败，实测必须用 raw bin + 显式设 PC 入口）。
+         */
+        val bootMode: String = BOOT_ELF,
+        /** BOOT_RAW 引导入口 PC（如 vapp 固件 0x6002e0）；0 = 不显式设 PC */
+        val entryAddr: Long = 0,
+        /** 数据盘镜像文件名（位于 images 目录，非空则挂载 virtio-blk-device；vapp 固件资源包在此） */
+        val dataImg: String = "",
     ) {
         companion object {
             const val MACHINE_VIRT = "virt"
             const val MACHINE_MPS2_AN500 = "mps2-an500"
             const val MACHINE_MPS2_AN521 = "mps2-an521"
+            const val BOOT_ELF = "elf"
+            const val BOOT_RAW = "raw"
             const val KERNEL_OPENVELA_ARMV7A_NSH = "openvela-qemu-armv7a-nsh.elf"
             const val KERNEL_OPENVELA_ARMV7A_FULL = "openvela-qemu-armv7a-full.elf"
             const val KERNEL_OPENVELA_MPS2_AN500_NSH = "openvela-mps2-an500-nsh.elf"
@@ -107,10 +122,11 @@ data class DeviceTemplate(
             else -> "方形"
         }
 
-    /** 适合的默认镜像清单条目 id（virt → full 图形版；mps2 → 对应 nsh 控制台版） */
+    /** 适合的默认镜像清单条目 id（模板可用 imageId 显式指定；缺省按机器类型推导） */
     val suggestedImageId: String
-        get() = when (qemu.machine) {
-            QemuSpec.MACHINE_VIRT -> "openvela-armv7a-full"
+        get() = when {
+            imageId.isNotBlank() -> imageId
+            qemu.machine == QemuSpec.MACHINE_VIRT -> "openvela-armv7a-full"
             else -> "openvela-${qemu.machine}-nsh"
         }
 

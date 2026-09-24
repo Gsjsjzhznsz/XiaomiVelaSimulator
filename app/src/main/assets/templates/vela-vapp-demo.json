@@ -1,0 +1,43 @@
+{
+  "id": "vela-vapp-demo",
+  "name": "Vela vApp 演示机 (内置固件)",
+  "brand": "Xiaomi",
+  "category": "watch",
+  "releaseYear": 2026,
+  "os": "Xiaomi VELA OS (NuttX + QuickJS + LVGL)",
+  "screen": {
+    "shape": "rect",
+    "sizeInch": 8.0,
+    "width": 1280,
+    "height": 800,
+    "dpi": 160,
+    "bezelPx": 6,
+    "bezelColor": "#101018"
+  },
+  "hardware": {
+    "cpuArch": "Cortex-A15 (虚拟化)",
+    "ramMb": 512,
+    "storageMb": 32,
+    "batteryMah": null
+  },
+  "features": ["speaker"],
+  "qemu": {
+    "machine": "virt",
+    "cpu": "cortex-a15",
+    "smp": 1,
+    "memoryMb": 512,
+    "kernel": "nuttx.bin",
+    "bootMode": "raw",
+    "entryAddr": 6295776,
+    "dataImg": "data.img",
+    "extraArgs": "",
+    "touchInput": true,
+    "autoCommand": "mount -t vfat /dev/virtblk0 /data; vapp hap://app/com.vela.demo"
+  },
+  "ui": {
+    "accentColor": "#FF6900",
+    "watchfaceStyle": "digital"
+  },
+  "imageId": "vela-vapp-demo",
+  "note": "v2.1 内置固件演示机：APK 自带 nuttx.bin + data.img（含 com.vela.demo vapp 资源包），QuickJS 解析 rpk → VDOM → LVGL → virtio-gpu 渲染，固件零下载、开箱即跑。引导方式为 raw bin @0x600000 + PC=0x6002e0（QEMU 10/11 的 -kernel ELF loader 对该固件静默失败）。"
+}

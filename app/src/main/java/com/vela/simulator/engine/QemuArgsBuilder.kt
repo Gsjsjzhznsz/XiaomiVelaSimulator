@@ -116,8 +116,26 @@ object QemuArgsBuilder {
             else -> args += listOf("-M", q.machine, "-cpu", q.cpu)
         }
 
-        // 内核（ELF 直接引导）
-        args += listOf("-kernel", kernel.absolutePath)
+        // 内核引导（v2.1 双模式）
+        if (q.bootMode == DeviceTemplate.QemuSpec.BOOT_RAW) {
+            // 原始 bin 经 loader 装载到 0x600000（vapp 固件实测：QEMU 10/11 的
+            // -kernel ELF loader 静默失败，必须用 raw bin + 显式设 PC 入口）
+            args += listOf("-device", "loader,file=${kernel.absolutePath},addr=0x600000")
+            if (q.entryAddr > 0) {
+                args += listOf("-device", "loader,addr=0x%08x,cpu-num=0".format(q.entryAddr))
+            }
+        } else {
+            // ELF 直接引导（旧 openvela 固件，行为不变）
+            args += listOf("-kernel", kernel.absolutePath)
+        }
+
+        // 数据盘（v2.1）：vapp 固件的数据/资源包镜像挂 virtio-blk（guest 内 mount /dev/virtblk0）
+        if (q.dataImg.isNotBlank()) {
+            val disk = File(imagesDir, q.dataImg)
+            check(disk.exists()) { "数据盘镜像不存在: ${q.dataImg}，请先在设备详情页下载" }
+            args += listOf("-drive", "file=${disk.absolutePath},if=none,format=raw,id=hd0")
+            args += listOf("-device", "virtio-blk-device,drive=hd0")
+        }
 
         // 无图形界面，显示走 VNC
         args += listOf("-display", "none", "-monitor", "none")

@@ -97,13 +97,13 @@ class ImageManager(private val context: Context) {
     fun kernelFile(name: String): File = File(imagesDir, name)
 
     /**
-     * 就绪判定（v0.2.7 加固）：文件存在 + ≥ 1MB + ELF 魔数。
-     * 修复：此前仅 length>0 即判就绪，代理错误页/历史版本残缺文件
-     * 被误判就绪 → QEMU 加载坏内核 → 无法启动/无画面。
+     * 就绪判定（v0.2.7 加固）：文件存在 + ≥ 1MB。
+     * v2.1 放宽：raw bin 固件（如 vapp nuttx.bin）无 ELF 魔数，但错误页/残缺
+     * 响应几乎不可能 ≥1MB，体积下限已是可靠防护，ELF 魔数改为可选特征。
      */
     fun isKernelReady(name: String): Boolean {
         val f = kernelFile(name)
-        return f.exists() && f.length() >= MIN_KERNEL_BYTES && isElfFile(f)
+        return f.exists() && f.length() >= MIN_KERNEL_BYTES
     }
 
     /** 本地内核文件实际大小（字节）；不存在返回 0。供 UI 显示真实体积 */
@@ -118,6 +118,7 @@ class ImageManager(private val context: Context) {
     /**
      * 下载清单条目中的全部文件（GitHub 资产自动级联反代重试 + 分段并行提速）。
      * 多文件时并行下载（并发 3），单文件内部走 HttpDownloader 分段逻辑。
+     * v2.1: 支持 asset:// 内置镜像（APK assets 直拷，零网络，秒级就绪）。
      */
     suspend fun download(entry: ImageEntry) = withContext(Dispatchers.IO) {
         imagesDir.mkdirs()
@@ -127,7 +128,11 @@ class ImageManager(private val context: Context) {
                 launch(Dispatchers.IO) {
                     sem.withPermit {
                         val dest = kernelFile(f.out)
-                        downloadWithFallback(f.url, dest, f.out, f.size)
+                        if (f.url.startsWith("asset://")) {
+                            copyFromAssets(f.url.removePrefix("asset://"), dest, f.out)
+                        } else {
+                            downloadWithFallback(f.url, dest, f.out, f.size)
+                        }
                     }
                 }
             }.joinAll()
@@ -145,6 +150,20 @@ class ImageManager(private val context: Context) {
             }
         }
         progress?.onStage("镜像就绪")
+    }
+
+    /** v2.1: 从 APK assets 拷贝内置镜像（asset://images/xxx → images/xxx） */
+    private fun copyFromAssets(assetPath: String, dest: File, label: String) {
+        if (dest.isFile && dest.length() > 0) {
+            progress?.onStage("内置镜像已就绪 $label")
+            return
+        }
+        progress?.onStage("部署内置镜像 $label")
+        dest.parentFile?.mkdirs()
+        context.assets.open(assetPath).use { ins ->
+            dest.outputStream().use { ins.copyTo(it) }
+        }
+        progress?.onLog("内置镜像部署完成: $label")
     }
 
     /**

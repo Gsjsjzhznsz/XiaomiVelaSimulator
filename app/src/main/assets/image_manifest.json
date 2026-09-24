@@ -1,8 +1,30 @@
 {
   "version": 1,
-  "updated": "2026-09-22",
+  "updated": "2026-09-24",
   "baseRepo": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator",
   "images": [
+    {
+      "id": "vela-vapp-demo",
+      "name": "Vela vApp 演示固件 (APK 内置 · v2.1)",
+      "desc": "v2.1 内置固件：OpenVela/NuttX + vapp 运行时 (QuickJS + VDOM + LVGL + virtio-gpu) + com.vela.demo 快应用资源包。nuttx.bin 与 data.img 均内置于 APK assets，无需联网下载，点击部署即秒级就绪。启动后 nsh 自动 mount 数据盘并运行 vapp hap://app/com.vela.demo，VNC 即呈现 vapp 渲染画面。",
+      "machine": "virt",
+      "kernel": "nuttx.bin",
+      "source": "OpenVela/NuttX + openrt (vapp runtime) · 内置于 APK assets/images",
+      "files": [
+        {
+          "url": "asset://images/nuttx.bin",
+          "sha256": "79efedee95bd0ab9ff6c6965a14ea00415a47d5f47d4bb158a5c6802346109a9",
+          "size": 1750576,
+          "out": "nuttx.bin"
+        },
+        {
+          "url": "asset://images/data.img",
+          "sha256": "5dc5172b0641b8c2126d99e79553b7244e2b332878f8737cb66d36fe07585188",
+          "size": 33554432,
+          "out": "data.img"
+        }
+      ]
+    },
     {
       "id": "openvela-armv7a-full",
       "name": "openvela · qemu-armv7a 图形版 (Cortex-A / 手表类)",
