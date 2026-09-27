@@ -69,6 +69,9 @@ class QemuSession(
     /** v2.1.1: vapp 自动命令重试次数（防慢机丢命令，最多 2 次） */
     private var autoRetryCount = 0
 
+    /** v2.1.2: 串口是否收到过任何 guest 字节（静默诊断用） */
+    private var serialBytesSeen = false
+
     fun appendLog(line: String) {
         logLines.value = (logLines.value + line).takeLast(800)
         FileLogger.sessionLine(line)
@@ -76,6 +79,7 @@ class QemuSession(
 
     /** 串口原始文本：处理不完整行，合并后再展示；同时检测 NSH 提示符触发自动命令 */
     fun appendLogRaw(text: String) {
+        serialBytesSeen = true
         pendingSerial += text
         val parts = pendingSerial.split('\n', '\r')
         pendingSerial = parts.last()
@@ -252,6 +256,20 @@ class QemuSession(
             }
             if (connected) {
                 appendLog("[serial] 已连接串口 tcp:${plan.serialPort}")
+                // v2.1.2: 串口静默诊断。正常引导下 guest 应在数秒内输出 nx_start 横幅；
+                // 60s 零字节 = CPU 未启动（固件损坏 / raw 入口 PC 错误等）。
+                // 真机教训：entryAddr 写错时全程零输出，看门狗因依赖 NSH 检测也永远
+                // 不生效，用户只见黑屏倒计时。这里写显式提示，让这类故障一眼可辨。
+                sc.launch {
+                    repeat(12) {
+                        delay(5_000)
+                        if (_state.value != State.RUNNING || serialBytesSeen) return@launch
+                    }
+                    if (_state.value == State.RUNNING && !serialBytesSeen) {
+                        appendLog("[vela] 串口已连接 60s 仍无任何 guest 输出：CPU 可能未正常引导（固件完整性 / raw 引导入口地址异常）。超过 240s 仍黑屏请提交本日志。")
+                        _bootPhase.value = "客户机无响应：可能固件引导异常"
+                    }
+                }
             } else {
                 appendLog("[serial] 串口连接失败（60s 超时）")
             }

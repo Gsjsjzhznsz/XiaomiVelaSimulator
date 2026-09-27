@@ -28,7 +28,7 @@
     "memoryMb": 512,
     "kernel": "nuttx.bin",
     "bootMode": "raw",
-    "entryAddr": 6295776,
+    "entryAddr": 6292192,
     "dataImg": "data.img",
     "extraArgs": "",
     "touchInput": true,

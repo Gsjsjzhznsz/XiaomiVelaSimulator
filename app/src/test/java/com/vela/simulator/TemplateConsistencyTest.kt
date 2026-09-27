@@ -30,8 +30,11 @@ class TemplateConsistencyTest {
     @Test
     fun `all builtin templates use unified graphics firmware`() {
         val templates = loadTemplates()
-        assertTrue("内置模板数量异常（期望 15）: ${templates.size}", templates.size == 15)
-        val bad = templates.filter {
+        // v2.1.0 起新增内置 vapp 演示机（BOOT_RAW 引导自有 nuttx.bin），共 16 款；
+        // 其余模板仍统一 virt + full 图形固件（v0.3.3 回归锁）
+        assertTrue("内置模板数量异常（期望 16）: ${templates.size}", templates.size == 16)
+        val graphics = templates.filter { it.qemu.bootMode != DeviceTemplate.QemuSpec.BOOT_RAW }
+        val bad = graphics.filter {
             it.qemu.machine != DeviceTemplate.QemuSpec.MACHINE_VIRT ||
                 it.qemu.kernel != DeviceTemplate.QemuSpec.KERNEL_OPENVELA_ARMV7A_FULL
         }
@@ -39,6 +42,19 @@ class TemplateConsistencyTest {
             "以下模板未使用 virt + full 图形固件（VNC 将永远无画面）: " +
                 bad.joinToString { "${it.id}(${it.qemu.machine}/${it.qemu.kernel})" },
             bad.isEmpty(),
+        )
+        // v2.1.2 回归锁：raw 引导模板必须携带与固件实测一致的入口 PC。
+        // 教训：vela-vapp-demo 一度写成 0x6010e0（正确值 0x6002e0），
+        // CPU 空转 → 串口零输出 → 串口/看门狗/重试链路全部无法生效 → 永久黑屏。
+        val badRaw = templates.filter { it.qemu.bootMode == DeviceTemplate.QemuSpec.BOOT_RAW }
+            .filter {
+                it.qemu.machine != DeviceTemplate.QemuSpec.MACHINE_VIRT ||
+                    it.qemu.entryAddr != 0x6002e0L
+            }
+        assertTrue(
+            "以下 raw 引导模板入口 PC 不是固件实测的 0x6002e0（CPU 将空转，串口/VNC 永久静默）: " +
+                badRaw.joinToString { "${it.id}(0x${it.qemu.entryAddr.toString(16)})" },
+            badRaw.isEmpty(),
         )
     }
 
