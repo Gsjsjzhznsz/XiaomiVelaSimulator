@@ -371,15 +371,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val vmDiskBusy: StateFlow<Boolean> = _vmDiskBusy
 
     /** 刷新数据盘包列表（工坊页进入时/安装卸载后调用）。
-     *  v2.2.2: 读取失败且输出命中 FAT 损坏特征时自动修复后重读 */
+     *  v2.2.2: 读取失败且输出命中 FAT 损坏特征时自动修复后重读
+     *  v2.2.3: 空结果延迟重读一次 —— 真机日志（09-27 18:29:27→28）实证同一镜像
+     *  先读出包、1 秒后 mcopy 成功返回空目录、30 秒后又自愈（mtools 对 FAT 目录
+     *  项的瞬时解析抖动）。任何有效数据盘都预装 com.vela.demo，空列表必然异常。 */
     fun refreshVmPackages() {
         if (_vmDiskBusy.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _vmDiskBusy.value = true
             RpkInstaller.list(runtime, vmDataDisk)
                 .onSuccess {
-                    _vmPackages.value = it
-                    FileLogger.i("rpk", "数据盘包列表: ${it.joinToString { p -> p.packageId }}")
+                    var result = it
+                    if (it.isEmpty()) {
+                        delay(400)
+                        result = RpkInstaller.list(runtime, vmDataDisk).getOrNull() ?: it
+                    }
+                    _vmPackages.value = result
+                    FileLogger.i("rpk", "数据盘包列表: ${result.joinToString { p -> p.packageId }}")
                 }
                 .onFailure { e ->
                     val msg = e.message ?: ""

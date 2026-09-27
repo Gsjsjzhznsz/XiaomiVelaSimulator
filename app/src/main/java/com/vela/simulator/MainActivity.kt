@@ -13,7 +13,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -38,8 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigationevent.NavigationEventDispatcherOwner
@@ -65,6 +65,7 @@ import com.vela.simulator.ui.screens.WorkshopScreen
 import com.vela.simulator.ui.theme.VelaTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.blur.layerBackdrop
@@ -278,7 +279,12 @@ fun VelaApp(vm: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 val id = detailId ?: return@AnimatedVisibility
-                OverlayHost(transform = predictiveTransform) {
+                OverlayHost(
+                    transform = predictiveTransform,
+                    onEdgeBackProgress = { backProgress = it },
+                    onEdgeBackCommit = { backProgress = 0f; closeTop() },
+                    onEdgeBackCancel = { backProgress = 0f },
+                ) {
                     TemplateDetailScreen(
                         vm, id,
                         onRun = { runId = id },
@@ -310,7 +316,12 @@ fun VelaApp(vm: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 val id = editorId
-                OverlayHost(transform = predictiveTransform) {
+                OverlayHost(
+                    transform = predictiveTransform,
+                    onEdgeBackProgress = { backProgress = it },
+                    onEdgeBackCommit = { backProgress = 0f; closeTop() },
+                    onEdgeBackCancel = { backProgress = 0f },
+                ) {
                     EditorScreen(vm, id, onBack = { editorId = null })
                 }
             }
@@ -321,7 +332,12 @@ fun VelaApp(vm: MainViewModel) {
                 exit = slideOutVertically { it } + fadeOut(tween(pushOut)),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                OverlayHost(transform = predictiveTransform) {
+                OverlayHost(
+                    transform = predictiveTransform,
+                    onEdgeBackProgress = { backProgress = it },
+                    onEdgeBackCommit = { backProgress = 0f; closeTop() },
+                    onEdgeBackCancel = { backProgress = 0f },
+                ) {
                     // v2.2: 工坊 rpk 在虚拟机内启动后切运行页。必须关闭本页 ——
                     // 本 overlay 绘制层级在 RunScreen 之后（画在其上），
                     // 不关会把运行页盖住
@@ -339,7 +355,12 @@ fun VelaApp(vm: MainViewModel) {
                 exit = slideOutVertically { it } + fadeOut(tween(pushOut)),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                OverlayHost(transform = predictiveTransform) {
+                OverlayHost(
+                    transform = predictiveTransform,
+                    onEdgeBackProgress = { backProgress = it },
+                    onEdgeBackCommit = { backProgress = 0f; closeTop() },
+                    onEdgeBackCancel = { backProgress = 0f },
+                ) {
                     WatchfaceScreen(vm, onBack = { showWatchface = false })
                 }
             }
@@ -350,7 +371,12 @@ fun VelaApp(vm: MainViewModel) {
                 exit = slideOutVertically { it } + fadeOut(tween(pushOut)),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                OverlayHost(transform = predictiveTransform) {
+                OverlayHost(
+                    transform = predictiveTransform,
+                    onEdgeBackProgress = { backProgress = it },
+                    onEdgeBackCommit = { backProgress = 0f; closeTop() },
+                    onEdgeBackCancel = { backProgress = 0f },
+                ) {
                     ThemeScreen(onBack = { showThemeScreen = false })
                 }
             }
@@ -361,35 +387,52 @@ fun VelaApp(vm: MainViewModel) {
                 exit = slideOutVertically { it } + fadeOut(tween(pushOut)),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                OverlayHost(transform = predictiveTransform) {
+                OverlayHost(
+                    transform = predictiveTransform,
+                    onEdgeBackProgress = { backProgress = it },
+                    onEdgeBackCommit = { backProgress = 0f; closeTop() },
+                    onEdgeBackCancel = { backProgress = 0f },
+                ) {
                     AboutScreen(onBack = { showAbout = false })
                 }
             }
 
-            // ===== 边缘手势兜底（targetSdk 28 拿不到系统预测进度流）=====
-            // 推入页打开时，左右边缘横向拖拽 → 跟手预览；系统手势导航的返回手势
-            // 被排除区让位，三键导航/全面屏手势下均可用。
-            EdgeBackGestures(
-                enabled = overlayOpen,
-                onProgress = { backProgress = it },
-                onCommit = { backProgress = 0f; closeTop() },
-                onCancel = { backProgress = 0f },
-            )
+            // ===== 系统手势区排除（纯布局，无触摸拦截）=====
+            // 旧实现在此叠加顶层 28dp 手势条监听边缘拖拽，但顶层兄弟参与命中
+            // 测试会整体遮蔽下层内容 → 屏幕两侧全高死区（设备 chips/页面滚动/
+            // VNC 在边缘“有几率划不动”，v2.2.3 真机实测）。边缘返回检测已移入
+            // OverlayHost 吸收层（内容优先，消费即让位）；此处仅保留对系统
+            // 手势导航的排除声明。
+            SystemGestureExclusionEdges()
         }
     }
 }
 
 /**
- * 推入页宿主（v0.2.4 触摸穿透修复）：
+ * 推入页宿主（v0.2.4 触摸穿透修复；v2.2.3 边缘返回重构）：
  * - 不透明背景：推入页不再透出底下的 Pager 页面；
  * - 触摸吸收层（absorbTouches）：空白区域的指针事件在本层被消费，不再落到
  *   底下的 HorizontalPager/模板卡片上。事件分发 Main pass 自深向浅，
  *   页内按钮/滚动先于本层拿到事件，交互不受影响。
  *   注意：内容包含 AndroidView 的页面（RunScreen 的 VNC）必须传 false，
  *   否则 View 会在 Final pass 收到已消费事件而被取消触摸。
+ * - v2.2.3 边缘返回并入吸收层：本层是内容祖先，Main pass 在所有子树之后
+ *   收到事件，此刻 change.isConsumed 恰好等于「内容是否已认领手势」——
+ *   设备 chips 横滑/页面竖滚/VNC 拖拽已被内容消费 → 返回手势让位；
+ *   空白区/不可滚动内容的未消费横向拖拽 → 驱动跟手返回预览。
+ *   旧实现（顶层 28dp 手势条）作为顶层兄弟参与命中测试，会整体遮蔽
+ *   下层内容，在屏幕两侧形成全高死区：overlay 页内 chips 行、页面滚动、
+ *   VNC 画面在边缘处“有几率划不动”（v2.2.3 用户日志+真机实测）。
  */
 @Composable
-private fun OverlayHost(transform: Modifier, absorbTouches: Boolean = true, content: @Composable () -> Unit) {
+private fun OverlayHost(
+    transform: Modifier,
+    absorbTouches: Boolean = true,
+    onEdgeBackProgress: ((Float) -> Unit)? = null,
+    onEdgeBackCommit: (() -> Unit)? = null,
+    onEdgeBackCancel: (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
     val bg = MiuixTheme.colorScheme.background
     Box(
         Modifier
@@ -398,11 +441,52 @@ private fun OverlayHost(transform: Modifier, absorbTouches: Boolean = true, cont
             .background(bg)
             .then(
                 if (absorbTouches) Modifier.pointerInput(Unit) {
+                    val edgePx = 28.dp.toPx()
+                    val fullPx = 240.dp.toPx()
+                    val slop = viewConfiguration.touchSlop
                     awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val w = size.width.toFloat()
+                        val startX = down.position.x
+                        val detect = onEdgeBackProgress != null &&
+                            (startX <= edgePx || startX >= w - edgePx)
+                        val inward = if (startX <= w / 2f) 1f else -1f
+                        var claimed = false
+                        var aborted = false
+                        var progress = 0f
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Main)
-                            event.changes.forEach { it.consume() }
-                            if (event.changes.all { !it.pressed }) break
+                            val changes = event.changes
+                            if (detect && !aborted) {
+                                val ch = changes.firstOrNull { it.id == down.id }
+                                when {
+                                    ch == null || ch.changedToUpIgnoreConsumed() -> {
+                                        // 抬手：按进度提交关闭或回弹
+                                        if (claimed) {
+                                            if (progress > 0.55f) onEdgeBackCommit?.invoke()
+                                            else onEdgeBackCancel?.invoke()
+                                        }
+                                        aborted = true
+                                    }
+                                    // 内容已认领（chips 横滑/页面竖滚/VNC）→ 本手势让位
+                                    !claimed && ch.isConsumed -> aborted = true
+                                    !claimed -> {
+                                        val dx = (ch.position.x - startX) * inward
+                                        if (dx > slop && dx > abs(ch.position.y - down.position.y)) {
+                                            claimed = true
+                                            onEdgeBackProgress?.invoke(0f)
+                                        }
+                                    }
+                                    else -> {
+                                        val dx = (ch.position.x - startX) * inward
+                                        progress = (dx / fullPx).coerceIn(0f, 1f)
+                                        onEdgeBackProgress?.invoke(progress)
+                                    }
+                                }
+                            }
+                            // 兼底吸收（原行为）：未被子树消费的事件不再落到下层 Pager
+                            changes.forEach { it.consume() }
+                            if (changes.all { !it.pressed }) break
                         }
                     }
                 } else Modifier
@@ -411,41 +495,15 @@ private fun OverlayHost(transform: Modifier, absorbTouches: Boolean = true, cont
 }
 
 /**
- * HyperOS 风格边缘返回手势（BandQQ 之外的新增兜底）：
- * 左右两侧各 28dp 竖条监听横向拖拽并从系统手势区排除（Android 10+），
- * progress 直接驱动 predictiveTransform 跟手；松手超阈值提交关闭，否则回弹。
- * 推入页未打开时不组合，零开销。
+ * 左右各 28dp 系统手势区排除（Android 10+）：仅布局声明，不挂 pointerInput、
+ * 不参与命中测试，触摸全部穿透到下层内容；配合 OverlayHost 内的边缘返回
+ * 检测，避免全面屏手势导航抢走边缘拖拽（targetSdk 28 拿不到预测进度流）。
  */
 @Composable
-private fun androidx.compose.foundation.layout.BoxScope.EdgeBackGestures(
-    enabled: Boolean,
-    onProgress: (Float) -> Unit,
-    onCommit: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    if (!enabled) return
-    val density = LocalDensity.current
-    val fullPx = with(density) { 240.dp.toPx() }
-    val gesture = Modifier
-        .fillMaxHeight()
-        .width(28.dp)
-        .systemGestureExclusion()
-        .pointerInput(Unit) {
-            var startX = 0f
-            var progress = 0f
-            detectHorizontalDragGestures(
-                onDragStart = { offset -> startX = offset.x; progress = 0f },
-                onDragEnd = { if (progress > 0.55f) onCommit() else onCancel() },
-                onDragCancel = { onCancel() },
-            ) { change, _ ->
-                val dx = kotlin.math.abs(change.position.x - startX)
-                progress = (dx / fullPx).coerceIn(0f, 1f)
-                onProgress(progress)
-            }
-        }
+private fun androidx.compose.foundation.layout.BoxScope.SystemGestureExclusionEdges() {
     Row(Modifier.fillMaxSize()) {
-        Box(gesture)
+        Box(Modifier.fillMaxHeight().width(28.dp).systemGestureExclusion())
         Box(Modifier.weight(1f))
-        Box(gesture)
+        Box(Modifier.fillMaxHeight().width(28.dp).systemGestureExclusion())
     }
 }
