@@ -235,3 +235,46 @@ Cannot initialize '::'
 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:720)
 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:707)
 
+09-27 18:29:16.152 I/app: ===== VELA Simulator 日志会话开始 20260927-182916 =====
+09-27 18:29:16.160 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-27 18:29:16.161 I/app: CrashGuard 已安装
+09-27 18:29:16.196 I/app: VelaApp.onCreate
+09-27 18:29:16.352 I/app: MainActivity.onCreate
+09-27 18:29:17.434 I/templates: 模板加载完成: 16 个
+09-27 18:29:20.307 W/rpk: 数据盘读取失败: 读取数据盘失败: Cluster # at 6 too big(0xfff0013)
+Probably non MS-DOS disk
+Error reading FAT
+Cannot initialize '::'
+09-27 18:29:20.309 W/rpk: DiskDoctor: 数据盘 FAT 损坏，开始自动修复
+09-27 18:29:20.890 I/rpk: DiskDoctor: 修复完成，恢复 1/1 个用户包
+09-27 18:29:27.309 I/rpk: 数据盘包列表: io.github.gsjsjzhznsz.bandqq
+09-27 18:29:28.244 I/rpk: 数据盘包列表: 
+09-27 18:29:33.902 I/rpk: 数据盘包列表: 
+09-27 18:29:50.992 I/rpk: 数据盘包列表: io.github.gsjsjzhznsz.bandqq
+09-27 18:29:51.278 I/session: 会话日志: session-20260927-182951.log
+09-27 18:29:51.279 I/session: 开始启动会话 template=smart-band-10-nfc machine=virt
+09-27 18:29:51.285 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=212,yres=520 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:44419,server -vnc 127.0.0.1:39067 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 18:29:52.587 I/vnc: desktop-resize 212x520 (smart-band-10-nfc)
+09-27 18:30:04.863 I/session: 停止会话
+09-27 18:30:06.099 I/session: QEMU 退出 code=0
+09-27 18:30:06.476 I/rpk: 数据盘包列表: com.vela.demo
+09-27 18:30:10.507 I/rpk: rpk 安装完成: io.github.gsjsjzhznsz.bandqq
+09-27 18:30:10.533 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-27 18:30:14.720 I/session: 会话日志: session-20260927-183014.log
+09-27 18:30:14.720 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-27 18:30:14.722 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:46521,server -vnc 127.0.0.1:26885 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 18:30:16.093 I/vnc: desktop-resize 432x514 (redmi-watch-5-esim)
+09-27 18:30:24.402 I/rpk: 数据盘包列表: com.vela.demo
+09-27 18:30:27.698 I/rpk: 数据盘包列表: com.vela.demo
+09-27 18:30:30.232 I/session: 停止会话
+09-27 18:30:30.233 I/rpk: 写数据盘前自动停止 1 台运行中的虚拟机
+09-27 18:30:31.450 I/session: QEMU 退出 code=0
+09-27 18:30:31.648 I/rpk: rpk 安装完成: io.github.gsjsjzhznsz.bandqq
+09-27 18:30:31.694 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-27 18:30:39.119 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-27 18:30:59.245 I/session: 停止会话
+09-27 18:30:59.246 I/session: 会话结束
+09-27 18:30:59.561 I/session: 会话日志: session-20260927-183059.log
+09-27 18:30:59.562 I/session: 开始启动会话 template=smart-band-10-nfc machine=virt
+09-27 18:30:59.564 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=212,yres=520 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:42007,server -vnc 127.0.0.1:33827 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 18:31:00.776 I/vnc: desktop-resize 212x520 (smart-band-10-nfc)
