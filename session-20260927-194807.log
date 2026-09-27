@@ -1,0 +1,36 @@
+===== 会话: Xiaomi Smart Band 10 NFC =====
+[qemu-cmd] /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=212,yres=520 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:40851,server -vnc 127.0.0.1:40341 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+[qemu] qemu-system-arm: -serial tcp:127.0.0.1:40851,server: info: QEMU waiting for connection on: disconnected:tcp:127.0.0.1:40851,server=on
+[serial] 已连接串口 tcp:40851
+[vnc] 连接尝试 #1 失败: failed to connect to /127.0.0.1 (port 46241) from /127.0.0.1 (port 60212) after 2000ms: isConnected failed: ECONNREFUSED (Connection refused)（持续重试中，等待 QEMU VNC 端口就绪）
+[vnc] 已连接 127.0.0.1:46241（第 1 轮，经 2 次尝试）
+[vnc] 服务器初始尺寸 640x480（模板期望 212x520，guest 图形就绪后自动切换）
+nx_start: Entry
+uart_register: Registering /dev/console
+uart_register: Registering /dev/ttyS1
+work_start_highpri: Starting high-priority kernel worker thread(s)
+nxtask_activate: hpwork pid=1,TCB=0x4021a628
+lib_cxx_initialize: _sinit: 0x72df74 _einit: 0x72df74
+nx_start_application: Starting init thread
+task_spawn: name=nsh_main entry=0x6139b8 file_actions=0 attr=0x40219fac argv=0x40219fa8
+nxtask_activate: nsh_main pid=2,TCB=0x4021a710
+[vnc] guest 扫描输出就绪，画面尺寸 → 212x520
+nx
+NuttShell (NSH)
+[vela] 检测到 NSH，自动执行 2 条命令
+nsh> [K_start: CPU0: Beginning Idle Loop
+[vela] 自动命令: mount -t vfat /dev/virtblk0 /data
+mount -t vfat /dev/virtblk0 /data
+nxposix_spawn_exec: ERROR: exec failed: 2
+nsh> [K
+[vela] 自动命令: vapp hap://app/io.github.gsjsjzhznsz.bandqq
+nsh> [Kvapp hap://app/io.github.gsjsjzhznsz.bandqq
+nxtask_activate: vapp pid=3,TCB=0x40227788
+[vapp] open runtime starting for io.github.gsjsjzhznsz.bandqq
+[vapp] package not found: io.github.gsjsjzhznsz.bandqq (looked in /data/RESOURCE/PACKAGE)
+[vela] 虚拟机内找不到该快应用包：可能数据盘刚被重部署（包已重置）。请到工坊重新安装后再启动
+nxtask_exit: vapp pid=3,TCB=0x40227788
+nsh> [K
+[vnc] 画面流结束: Socket closed
+[qemu] 输出流结束: read interrupted by close() on another thread
+[vela] QEMU 已退出（代码 0）

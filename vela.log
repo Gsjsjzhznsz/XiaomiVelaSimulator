@@ -278,3 +278,20 @@ Cannot initialize '::'
 09-27 18:30:59.562 I/session: 开始启动会话 template=smart-band-10-nfc machine=virt
 09-27 18:30:59.564 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=212,yres=520 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:42007,server -vnc 127.0.0.1:33827 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
 09-27 18:31:00.776 I/vnc: desktop-resize 212x520 (smart-band-10-nfc)
+09-27 19:47:50.226 I/app: ===== VELA Simulator 日志会话开始 20260927-194750 =====
+09-27 19:47:50.234 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-27 19:47:50.235 I/app: CrashGuard 已安装
+09-27 19:47:50.267 I/app: VelaApp.onCreate
+09-27 19:47:50.424 I/app: MainActivity.onCreate
+09-27 19:47:51.335 I/templates: 模板加载完成: 16 个
+09-27 19:47:53.241 I/rpk: 数据盘包列表: com.vela.demo
+09-27 19:47:58.986 I/rpk: rpk 安装完成: io.github.gsjsjzhznsz.bandqq
+09-27 19:47:59.025 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-27 19:48:07.343 I/session: 会话日志: session-20260927-194807.log
+09-27 19:48:07.343 I/session: 开始启动会话 template=smart-band-10-nfc machine=virt
+09-27 19:48:07.350 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=212,yres=520 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:40851,server -vnc 127.0.0.1:40341 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 19:48:08.677 I/vnc: desktop-resize 212x520 (smart-band-10-nfc)
+09-27 19:48:20.873 I/rpk: 数据盘包列表: com.vela.demo
+09-27 19:48:26.261 I/session: 停止会话
+09-27 19:48:26.262 I/session: 已结束全部虚拟机（1 台）
+09-27 19:48:27.474 I/session: QEMU 退出 code=0
