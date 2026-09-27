@@ -53,7 +53,10 @@ class StartupTest {
         }
         rule.onNodeWithText("设备模板（16）").assertExists()
         // 组合树非空
-        val tree = rule.onRoot().printToString(maxDepth = 4)
+        // v2.2.2: 首页重构为 LazyVerticalGrid 单一根滚动容器（header 变全宽 item），
+        // 内容节点变深 —— maxDepth 4→12；断言语义不变：树非空且含真实内容
+        // （黑屏回归时组合被静默跳过，任意深度都打不出内容）
+        val tree = rule.onRoot().printToString(maxDepth = 12)
         org.junit.Assert.assertTrue("组合树为空（黑屏回归）", tree.contains("QEMU"))
     }
 }

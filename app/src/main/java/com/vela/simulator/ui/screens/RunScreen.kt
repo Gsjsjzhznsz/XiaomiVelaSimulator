@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -118,7 +119,8 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
     val showBootOverlay = state == QemuSession.State.RUNNING &&
         !scanoutReady && bootElapsed < BOOT_OVERLAY_TIMEOUT_MS
 
-    Column(modifier.fillMaxSize()) {
+    // v2.2.2: statusBarsPadding —— Android 15 edge-to-edge 下顶栏不得画进系统状态栏
+    Column(modifier.fillMaxSize().statusBarsPadding()) {
         // 顶栏
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }

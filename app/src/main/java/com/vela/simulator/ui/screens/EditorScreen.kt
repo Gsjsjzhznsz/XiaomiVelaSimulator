@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -69,7 +70,8 @@ fun EditorScreen(vm: MainViewModel, id: String?, onBack: () -> Unit, modifier: M
         qemu = DeviceTemplate.QemuSpec(machine = machine, cpu = cpu, smp = smp, memoryMb = memMb, extraArgs = extraArgs),
     )
 
-    Column(modifier.fillMaxSize()) {
+    // v2.2.2: statusBarsPadding —— Android 15 edge-to-edge 下顶栏不得画进系统状态栏
+    Column(modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             Text("模板编辑器", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))

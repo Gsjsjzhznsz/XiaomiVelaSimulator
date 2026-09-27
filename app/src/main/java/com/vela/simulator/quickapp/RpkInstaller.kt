@@ -19,8 +19,25 @@ import java.io.File
  *
  * mtools 来自 Termux 软件源（约 140KB，依赖 libandroid-support/libiconv，
  * qemu 依赖树已覆盖大部分）：首次使用时按需安装到运行时前缀。
+ *
+ * v2.2.2 数据盘自愈（DiskDoctor）：真机实锤 guest 解包写盘中断/固件 FAT 写路径
+ * 半更新（FAT[6]=0x0fff0013 = 新低 16bit + 旧高位残留）可损坏数据盘，
+ * 后续所有 mtools 操作永久失败。防线：① 停止会话前向 guest 发 sync；
+ * ② 会话退出后主动健康探测（mdir），命中 FAT 损坏签名立即自动修复
+ * （重部署内置干净 data.img + 从 files/quickapps 备份恢复用户包）；
+ * ③ 安装/读取/卸载失败同样触发自动修复。
+ * 注：曾试验安装时宿主侧预解包到 ::/vapps/<pkg>（让 vapp 零写启动），
+ * 实测 vapp 对 mtools 写的 8.3 短名条目无法路径解析（mtools 自身也无法
+ * 解析），三轮启动全部回退到重新解包，已废弃该路线。
  */
 object RpkInstaller {
+
+    /** v2.2.2: mtools 输出中判定 FAT 已损坏的特征串（真机实锤：
+     *  "Cluster # at 6 too big(0xfff0013)" / "Error reading FAT" 等）。
+     *  纯函数（单测锁定） */
+    fun isFatCorruptOutput(out: String): Boolean = listOf(
+        "error reading fat", "cannot initialize", "non ms-dos disk", "too big(",
+    ).any { out.lowercase().contains(it) }
 
     /** 数据盘中解析出的 vapp 包 */
     data class VmPackage(
@@ -35,7 +52,7 @@ object RpkInstaller {
     private fun bin(runtime: QemuRuntime, name: String) = File(runtime.prefixUsr, "bin/$name")
 
     fun toolsReady(runtime: QemuRuntime): Boolean =
-        listOf("mcopy", "mdel", "mdeltree").all { name ->
+        listOf("mcopy", "mdel", "mdeltree", "mdir").all { name ->
             bin(runtime, name).let { it.exists() && it.canExecute() }
         }
 
@@ -47,7 +64,7 @@ object RpkInstaller {
             runCatching {
                 if (!toolsReady(runtime)) {
                     runtime.ensurePackage("mtools", progress)
-                    listOf("mcopy", "mdel", "mtype", "mdir", "mdeltree").forEach {
+                    listOf("mcopy", "mdel", "mtype", "mdir", "mdeltree", "mmd", "mformat").forEach {
                         bin(runtime, it).setExecutable(true, false)
                     }
                 }
@@ -70,6 +87,8 @@ object RpkInstaller {
 
     /**
      * 安装 rpk 到数据盘 ::/resource/package/<packageId>.rpk（同名覆盖 = 升级）。
+     * v2.2.2: 同时把包内容预解包到 ::/vapps/<packageId>/ —— vapp 启动时发现
+     * 解包树已存在即走零写路径，guest 不再对 FAT 做任何解包写盘（防损坏）。
      * 写入后回读校验 manifest 的 package 字段一致才算成功。
      */
     suspend fun install(
@@ -103,6 +122,23 @@ object RpkInstaller {
             progress?.onStage("安装完成: $pkgId")
             pkgId
         }
+    }
+
+    /**
+     * v2.2.2: 数据盘健康探测（mdir 读根目录）。
+     * 返回 (healthy, 原始输出) —— 输出供 isFatCorruptOutput 判定。
+     */
+    fun diskHealthProbe(
+        runtime: QemuRuntime,
+        dataDisk: File,
+    ): Pair<Boolean, String> {
+        if (!dataDisk.isFile) return true to ""
+        if (!bin(runtime, "mdir").let { it.exists() && it.canExecute() }) return true to ""
+        val (code, out) = exec(
+            runtime,
+            listOf(bin(runtime, "mdir").absolutePath, "-i", dataDisk.absolutePath, "-b", "::/"),
+        )
+        return (code == 0) to out
     }
 
     /** 从数据盘提取 rpk 到本地临时文件（校验/详情用） */
@@ -165,8 +201,8 @@ object RpkInstaller {
     }
 
     /** 从数据盘移除包（内置 com.vela.demo 允许移除；重新部署内置镜像即可恢复）。
-     *  v2.2.1: 同时清理 guest 侧解包树 ::/vapps/<pkg>（vapp 路径#1 优先用解包树，
-     *  只删 .rpk 的话包在「卸载」后仍能启动） */
+     *  v2.2.1: 同时清理解包树 ::/vapps/<pkg>（vapp 路径#1 优先用解包树，
+     *  只删 .rpk 的话包在「卸载」后仍能启动）。v2.2.2 起解包树由宿主预解包产生。 */
     suspend fun remove(
         runtime: QemuRuntime,
         dataDisk: File,

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -87,7 +88,8 @@ fun WatchfaceScreen(vm: MainViewModel, onBack: () -> Unit, modifier: Modifier = 
         if (uri != null) vm.importWatchface(uri)
     }
 
-    Column(modifier.fillMaxSize()) {
+    // v2.2.2: statusBarsPadding —— Android 15 edge-to-edge 下顶栏不得画进系统状态栏
+    Column(modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             Text("表盘模拟 (.bin)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

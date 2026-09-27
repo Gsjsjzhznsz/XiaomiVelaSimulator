@@ -394,11 +394,22 @@ class QemuSession(
         _state.value = State.IDLE
         val p = process
         if (p != null) {
-            runCatching { p.destroy() }
+            // v2.2.2: 优雅落盘 —— guest（NuttX）对 FAT 的写是写回缓存式的，直接
+            // SIGTERM 会丢脏扇区，FAT 表项半更新即整盘损坏（真机实锤：
+            // FAT[6]=0x0fff0013 = 新低 16bit + 旧 EOC 高位残留 → 数据盘报废）。
+            // 若串口曾有过 guest 输出（NSH 可能可响应），先发 sync 给 guest
+            // ~1.2s 写回窗口，再 SIGTERM；看门狗升级强杀逻辑保持不变。
+            // sync 在 vapp 前台运行时会滞留在 guest 输入缓冲，无副作用。
+            if (serialBytesSeen) {
+                runCatching { console.sendLine("sync") }
+                    .onFailure { FileLogger.w("session", "sync 发送失败（忽略）: ${it.message}") }
+            }
             // v0.2.7：SIGTERM 未生效时后台线程升级强杀（不阻塞 UI 线程），
             // 修复此前偶发的“点了停止但 QEMU 进程仍在后台运行”
             Thread {
                 runCatching {
+                    Thread.sleep(1200)
+                    p.destroy()
                     if (!p.waitFor(3, TimeUnit.SECONDS)) {
                         FileLogger.w("session", "进程未响应 SIGTERM，强制结束 (pid=${p.hashCode()})")
                         p.destroyForcibly()

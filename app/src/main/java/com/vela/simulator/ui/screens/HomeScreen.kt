@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,59 +79,71 @@ fun HomeScreen(
     LaunchedEffect(Unit) { lastCrash = FileLogger.lastCrashSummary() }
 
     PageScaffold(title = "设备", bottomInnerPadding = bottomInnerPadding) { inner ->
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
+    // v2.2.2: 整页统一滚动 —— 旧结构固定 header（标题/运行时卡/统计行）
+    // + LazyVerticalGrid(weight(1f))，网格只占屏幕下半部，在 header 上滑动
+    // 完全无响应（真机反馈“设备列表需要划许多下才有反应”的根因）。
+    // 现把 header 全部改为 grid 全宽 item，任何位置滑动都能滚动列表。
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 150.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
     ) {
-        Spacer(Modifier.height(inner.calculateTopPadding()))
-        Text("Xiaomi VELA 模拟器", style = MaterialTheme.typography.headlineMedium)
-        Text(
-            "基于 openvela 官方源码与 QEMU 的可穿戴设备系统仿真",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
-        )
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column {
+                Spacer(Modifier.height(inner.calculateTopPadding()))
+                Text("Xiaomi VELA 模拟器", style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    "基于 openvela 官方源码与 QEMU 的可穿戴设备系统仿真",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
 
         lastCrash?.let { (fname, cause) ->
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF3A1A1A)),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("⚠ 上次异常退出", color = VelaRed, style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.weight(1f))
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF3A1A1A)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("⚠ 上次异常退出", color = VelaRed, style = MaterialTheme.typography.titleSmall)
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                "忽略",
+                                color = VelaTextDim,
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        FileLogger.lastCrashFile()?.let { FileLogger.dismissCrash(it) }
+                                        lastCrash = null
+                                    }
+                                    .padding(4.dp),
+                            )
+                        }
                         Text(
-                            "忽略",
+                            cause,
                             color = VelaTextDim,
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    FileLogger.lastCrashFile()?.let { FileLogger.dismissCrash(it) }
-                                    lastCrash = null
-                                }
-                                .padding(4.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        Text(
+                            "详情见设置→诊断日志（$fname）",
+                            color = VelaTextDim,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 2.dp),
                         )
                     }
-                    Text(
-                        cause,
-                        color = VelaTextDim,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                    Text(
-                        "详情见设置→诊断日志（$fname）",
-                        color = VelaTextDim,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
                 }
             }
         }
 
         // 运行时状态卡片
+        item(span = { GridItemSpan(maxLineSpan) }) {
         Card(
             colors = CardDefaults.cardColors(containerColor = VelaSurface),
             shape = RoundedCornerShape(20.dp),
@@ -165,36 +178,31 @@ fun HomeScreen(
                 }
             }
         }
+        }
 
-        Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("设备模板（${templates.size}）", style = MaterialTheme.typography.titleMedium)
-            // v0.2.7：存在运行中虚拟机时提供一键全部结束
-            if (runningIds.isNotEmpty()) {
-                TextButton(onClick = { vm.stopAllSessions() }) {
-                    Icon(Icons.Filled.Stop, null, tint = VelaRed, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("结束全部（${runningIds.size}）", color = VelaRed, style = MaterialTheme.typography.labelLarge)
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("设备模板（${templates.size}）", style = MaterialTheme.typography.titleMedium)
+                // v0.2.7：存在运行中虚拟机时提供一键全部结束
+                if (runningIds.isNotEmpty()) {
+                    TextButton(onClick = { vm.stopAllSessions() }) {
+                        Icon(Icons.Filled.Stop, null, tint = VelaRed, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("结束全部（${runningIds.size}）", color = VelaRed, style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
 
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.weight(1f),
-        ) {
-            items(templates, key = { it.first.id + it.second.fileName }) { (t, meta) ->
-                TemplateCard(t, meta.source, running = t.id in runningIds) { onSelect(t.id) }
-            }
-            item {
-                NewTemplateCard { onSelect("__new__") }
-            }
-            // 底部安全余量：悬浮底栏下方不被遮挡
-            item {
-                Spacer(Modifier.height(bottomInnerPadding + 12.dp))
-            }
+        items(templates, key = { it.first.id + it.second.fileName }) { (t, meta) ->
+            TemplateCard(t, meta.source, running = t.id in runningIds) { onSelect(t.id) }
+        }
+        item {
+            NewTemplateCard { onSelect("__new__") }
+        }
+        // 底部安全余量：悬浮底栏下方不被遮挡
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Spacer(Modifier.height(bottomInnerPadding + 12.dp))
         }
     }
     }

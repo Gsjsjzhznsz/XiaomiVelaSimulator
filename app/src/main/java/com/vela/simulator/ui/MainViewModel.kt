@@ -17,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -183,6 +184,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         s.launchApp = launchApp?.takeIf { it.isNotBlank() } ?: launchAppFor(t.id)
         sessions[t.id] = s
         _sessionState.value = sessions.toMap()
+        // v2.2.2: 会话退出后数据盘健康自检 —— 命中 FAT 损坏签名立即自动修复
+        //（重部署干净镜像 + 恢复备份包），防止用户下一次启动黑屏/安装永久失败
+        viewModelScope.launch(Dispatchers.IO) {
+            s.state.first { st ->
+                st == QemuSession.State.EXITED || st == QemuSession.State.FAILED || st == QemuSession.State.IDLE
+            }
+            runCatching {
+                awaitQemuExit()
+                val (healthy, out) = RpkInstaller.diskHealthProbe(runtime, vmDataDisk)
+                if (!healthy && RpkInstaller.isFatCorruptOutput(out)) {
+                    FileLogger.w("rpk", "会话结束后数据盘 FAT 损坏，自动修复: ${out.trim().take(120)}")
+                    if (repairDataDisk()) refreshVmPackages()
+                }
+            }.onFailure { FileLogger.w("rpk", "会话后健康自检异常（忽略）: ${it.message}") }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             // 任何启动异常都必须留在会话内，绝不能带崩整个应用
             runCatching {
@@ -354,7 +370,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _vmDiskBusy = MutableStateFlow(false)
     val vmDiskBusy: StateFlow<Boolean> = _vmDiskBusy
 
-    /** 刷新数据盘包列表（工坊页进入时/安装卸载后调用） */
+    /** 刷新数据盘包列表（工坊页进入时/安装卸载后调用）。
+     *  v2.2.2: 读取失败且输出命中 FAT 损坏特征时自动修复后重读 */
     fun refreshVmPackages() {
         if (_vmDiskBusy.value) return
         viewModelScope.launch(Dispatchers.IO) {
@@ -364,7 +381,73 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _vmPackages.value = it
                     FileLogger.i("rpk", "数据盘包列表: ${it.joinToString { p -> p.packageId }}")
                 }
-                .onFailure { FileLogger.w("rpk", "数据盘读取失败: ${it.message}") }
+                .onFailure { e ->
+                    val msg = e.message ?: ""
+                    FileLogger.w("rpk", "数据盘读取失败: $msg")
+                    if (RpkInstaller.isFatCorruptOutput(msg) && repairDataDisk()) {
+                        RpkInstaller.list(runtime, vmDataDisk).onSuccess { l -> _vmPackages.value = l }
+                    }
+                }
+            _vmDiskBusy.value = false
+        }
+    }
+
+    // ---- v2.2.2 DiskDoctor: 数据盘 FAT 损坏自动修复 ----
+    // 真机实锤：guest 解包写盘中断 → FAT 表项半更新（0x0fff0013）→ 整盘报废，
+    // 后续所有 list/install 永久失败，用户只能重装应用。修复 = 重部署内置干净
+    // data.img（SHA 不匹配自动触发 assets 重拷，零网络）+ 从 files/quickapps
+    // 备份恢复用户导入的包（install 现自带预解包，恢复即零写就绪）。
+
+    private var diskRepairing = false
+
+    private fun dataImageEntryId(): String =
+        images.loadManifest().images.firstOrNull { e -> e.files.any { it.out == "data.img" } }?.id
+            ?: "vela-vapp-demo"
+
+    /**
+     * 自动修复数据盘。返回 true = 已重建并恢复包（调用方可重试原操作）。
+     * excludePackageId: 恢复时排除的包（卸载场景下不再回来）。
+     */
+    private suspend fun repairDataDisk(excludePackageId: String? = null): Boolean {
+        if (diskRepairing) return false
+        diskRepairing = true
+        _vmDiskBusy.value = true
+        try {
+            _vmInstallState.value = _vmInstallState.value.copy(
+                busy = true, stage = "检测到数据盘损坏，正在自动修复…", error = null,
+            )
+            FileLogger.w("rpk", "DiskDoctor: 数据盘 FAT 损坏，开始自动修复")
+            prepareDiskExclusive()?.let {
+                _vmInstallState.value = VmInstallUiState(error = "数据盘已损坏且无法停止运行中的虚拟机：$it")
+                return false
+            }
+            val ok = images.ensureAssetsCurrent(dataImageEntryId())
+            if (!ok || !vmDataDisk.isFile) {
+                _vmInstallState.value = VmInstallUiState(
+                    error = "数据盘修复失败：内置镜像重部署异常，请到设备详情页手动「重新部署」",
+                )
+                return false
+            }
+            // 同包多份历史导入取最新（listImported 已按时间降序）
+            val backups = RpkManager.listImported(ctx)
+                .mapNotNull { f -> RpkManager.parse(f).getOrNull()?.let { it.packageId to f } }
+                .groupBy({ it.first }) { it.second }
+                .map { (id, files) -> id to files.first() }
+                .filter { it.first.isNotBlank() && it.first != excludePackageId }
+            var okCount = 0
+            for ((id, f) in backups) {
+                runCatching { RpkInstaller.install(runtime, vmDataDisk, f) }
+                    .onSuccess { okCount++ }
+                    .onFailure { FileLogger.e("rpk", "DiskDoctor: 恢复 $id 失败", it) }
+            }
+            FileLogger.i("rpk", "DiskDoctor: 修复完成，恢复 $okCount/${backups.size} 个用户包")
+            _vmInstallState.value = VmInstallUiState(
+                stage = if (backups.isEmpty()) "数据盘已自动修复"
+                        else "数据盘已自动修复（恢复 $okCount 个包）",
+            )
+            return true
+        } finally {
+            diskRepairing = false
             _vmDiskBusy.value = false
         }
     }
@@ -391,9 +474,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _vmInstallState.value = VmInstallUiState(installedPkgId = it, stage = "已安装到数据盘")
                     refreshVmPackages()
                 }
-                .onFailure {
-                    FileLogger.e("rpk", "rpk 安装失败", it)
-                    _vmInstallState.value = VmInstallUiState(error = it.message ?: "安装失败")
+                .onFailure { e ->
+                    val msg = e.message ?: ""
+                    FileLogger.e("rpk", "rpk 安装失败", e)
+                    // v2.2.2: FAT 损坏 → 自动修复 + 重试一次
+                    if (RpkInstaller.isFatCorruptOutput(msg) && repairDataDisk()) {
+                        RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress)
+                            .onSuccess {
+                                _vmInstallState.value = VmInstallUiState(installedPkgId = it, stage = "数据盘修复后安装成功")
+                                refreshVmPackages()
+                            }
+                            .onFailure { e2 ->
+                                FileLogger.e("rpk", "修复后重试仍失败", e2)
+                                _vmInstallState.value = VmInstallUiState(error = e2.message ?: "安装失败")
+                            }
+                    } else {
+                        _vmInstallState.value = VmInstallUiState(error = msg.ifBlank { "安装失败" })
+                    }
                 }
         }
     }
@@ -409,7 +506,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             RpkInstaller.remove(runtime, vmDataDisk, packageId)
-                .onFailure { FileLogger.e("rpk", "rpk 卸载失败: $packageId", it) }
+                .onFailure { e ->
+                    val msg = e.message ?: ""
+                    FileLogger.e("rpk", "rpk 卸载失败: $packageId", e)
+                    // v2.2.2: 盘已损坏时修复后无需重删 —— 恢复时排除该包即等效卸载
+                    if (RpkInstaller.isFatCorruptOutput(msg)) repairDataDisk(excludePackageId = packageId)
+                }
             _vmDiskBusy.value = false
             refreshVmPackages()
         }
@@ -436,7 +538,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     override fun onFileProgress(name: String, downloaded: Long, total: Long) {}
                     override fun onLog(line: String) { FileLogger.i("rpk", line) }
                 }
-                val r = RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress)
+                val r0 = RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress)
+                val r = if (r0.isFailure && RpkInstaller.isFatCorruptOutput(r0.exceptionOrNull()?.message ?: "")) {
+                    // v2.2.2: FAT 损坏 → 自动修复 + 重试一次
+                    if (repairDataDisk()) RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress) else r0
+                } else r0
                 if (r.isFailure) {
                     _vmInstallState.value = VmInstallUiState(error = r.exceptionOrNull()?.message ?: "安装失败")
                     return@launch

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -245,7 +246,9 @@ fun QuickAppScreen(
         }
     }
 
-    Column(modifier.fillMaxSize()) {
+    // v2.2.2: statusBarsPadding —— Android 15 强制 edge-to-edge，overlay 页
+    // 顶栏原本画进系统状态栏内（返回/标题/导入按钮与时钟电量重叠）
+    Column(modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             Text("快应用 · 虚拟机运行", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
