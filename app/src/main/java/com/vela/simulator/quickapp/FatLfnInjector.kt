@@ -1,27 +1,31 @@
 package com.vela.simulator.quickapp
 
 /**
- * v2.2.4: FAT32 镜像 LFN 长名链注入器（宿主侧，无需 mtools/root）。
+ * v2.2.5: FAT32 镜像 LFN 长名链注入器（宿主侧，无需 mtools/root）。
  *
- * 背景（桌面 e2e + guest 内逐级探测实证，配方见 scripts/fat_lfn_inject.py）：
+ * 背景（桌面 e2e + guest 内逐级探测实证，配方见 scripts/repro_v224/）：
  * 1. 固件 NuttX FAT 对 8.3 短名条目做「原始字节大小写敏感」比较（/data/RESOURCE 可查，
  *    /data/resource ENOENT），且不尊重 NTRes 小写标志位、拒绝小写字节的 8.3 条目；
- * 2. vapp_main.c 的解包树路径是小写的 /data/vapps/<pkg>/app.js，而 mtools 写出的
- *    VAPPS/APP.JS/PAGES 等短名条目全是大写字节 → 永远查不到 → vapp 每次首启都
- *    走解包写盘（路径#2）；
+ *    小写查找（vapp 的 /data/vapps/<pkg>、app.js 等）只能靠 LFN 长名链命中；
+ * 2. v2.2.5 新实证（真机日志 + 桌面 20+ 组对照实验）：固件 LFN 打开存在
+ *    「绝对路径长度 ≥48 字符即绑定错误 dirent（起始簇=0）→ 首读 EIO」缺陷，
+ *    与目录深度/名长/簇位无关（47 字符通过、48 字符失败，单变量二分实锤）。
+ *    因此 App 侧同时用「安全短 ID」（≤12 字符，最长路径 ≤39 字符）远离该边界，
+ *    本注入器只处理 1 段 LFN（≤13 字符文件名）的补链，全部在已实证安全区。
  * 3. 固件 FAT 写路径存在「半更新」缺陷（新分配簇链前两个表项高 16 位残留 EOC 的
- *    0xffff），每次解包写盘都会触发 → 数据盘亚损坏：mtools 宽容可读、NuttX 拒绝 →
- *    vapp 报 package not found → 用户陷入「重装也无效」的黑屏循环。
+ *    0xffff），guest 解包写盘会触发 → 数据盘亚损坏（mtools 宽容可读、NuttX 拒绝）。
+ *    预解包树 + LFN 注入让 vapp 命中路径#1 零写启动，写盘路径不可达。
  *
- * 修复：给 /vapps 子树内所有「无 LFN 链的短名条目」注入小写 LFN 长名链（LFN 按
- * 大小写精确匹配，是 NuttX 唯一能命中小写名称的形态）。配合宿主预解包（install 时
- * 把 rpk 解包树写入 ::/vapps/<pkg>），vapp 命中路径#1 零写启动，guest 不再写数据盘，
- * FAT 损坏代码路径不可达（e2e 实证整周期镜像字节零变化）。
+ * v2.2.4 版注入器三缺陷（本轮字节级取证实锤，全部修复）：
+ * ① LFN 块序颠倒——seq N|0x40（盘上首条）必须持名字【结尾】13 字符、seq 1（紧贴
+ *   短条目）持【开头】13 字符（mcopy 写的链 guest 100% 可解析 = 铁证），旧实现相反；
+ * ② 逻辑名组装按盘序遇 0x0000 终止符即 break → 长名目录的 logical 被截断
+ *   （bandqq → "qq"）→ 子树前缀变垃圾；
+ * ③ 注入名混入完整路径前缀（'/vapps/qqcommon'）——FAT 文件名不含 '/'。
  *
- * LFN 链规范：条目 attr=0x0F，序号倒序（首条目 |0x40），checksum 为短名 11 字节
- * 循环校验，名称 UTF-16LE 以 0x0000 结尾、0xFFFF 填充。链必须紧贴短条目之前。
- * 注意：已有 LFN 链的条目组必须【原样保留全部字节】（否则 manifest.json 等长名
- * 条目的 LFN 丢失 → NuttX 无法再解析——python 版曾踩此坑，e2e 抓出）。
+ * LFN 链规范：条目 attr=0x0F，盘序 = seq N|0x40（末段）… seq 1（首段）紧贴短条目，
+ * checksum 为短名 11 字节循环校验，名称 UTF-16LE 以 0x0000 结尾、0xFFFF 填充。
+ * 已有 LFN 链的条目组必须【原样保留全部字节】（mcopy 写的链是正确性基准）。
  */
 object FatLfnInjector {
 
@@ -70,10 +74,10 @@ object FatLfnInjector {
         fun fatEntry(n: Int): Int {
             if (n < 2 || n >= maxclus + 2) return -1
             val off = b.rsvd * SEC + n * 4
-            return (img[off].toInt() and 0xFF) or
+            return ((img[off].toInt() and 0xFF) or
                 ((img[off + 1].toInt() and 0xFF) shl 8) or
                 ((img[off + 2].toInt() and 0xFF) shl 16) or
-                ((img[off + 3].toInt() and 0xFF) shl 24) and 0x0FFFFFFF
+                ((img[off + 3].toInt() and 0xFF) shl 24)) and 0x0FFFFFFF
         }
 
         fun clusOff(c: Int) = (b.dataStart + (c - 2) * b.spc) * SEC
@@ -111,7 +115,10 @@ object FatLfnInjector {
             return s
         }
 
-        /** 为 name 生成倒序 LFN 条目块（seq N..1，首条 |0x40） */
+        /**
+         * v2.2.5 修复①：为 name 生成盘序正确的 LFN 条目块。
+         * 盘序 = seq N|0x40 持【末段】… seq 1 持【首段】（紧贴短条目）。
+         */
         fun lfnBlocks(name: String, cksum: Int): List<ByteArray> {
             val units = ArrayList<Int>()
             name.forEach { units.add(it.code and 0xFFFF) }
@@ -125,8 +132,9 @@ object FatLfnInjector {
                 e[0] = (seq or (if (seq == n) 0x40 else 0)).toByte()
                 e[11] = 0x0F; e[12] = 0
                 e[13] = cksum.toByte(); e[26] = 0; e[27] = 0
+                // seq=s 持第 s 段（1-based）：units[(s-1)*13 .. s*13-1]
                 for (i in 0 until 13) {
-                    val v = units[(n - seq) * 13 + i]
+                    val v = units.getOrElse((seq - 1) * 13 + i) { 0xFFFF }
                     e[pos[i]] = (v and 0xFF).toByte()
                     e[pos[i] + 1] = ((v shr 8) and 0xFF).toByte()
                 }
@@ -139,11 +147,26 @@ object FatLfnInjector {
 
         var injected = 0
 
+        /** v2.2.5 修复②：按 seq 语义序（1=首段…N=末段）拼长名，而非盘序遇到终止符即停 */
+        fun assembleLfn(pendingLfn: List<ByteArray>): String {
+            // pendingLfn 为盘序（seq N|0x40 … seq 1）；反转后即 seq 1…N = 名字顺序
+            val sb = StringBuilder()
+            for (p in pendingLfn.reversed()) {
+                for (i in intArrayOf(1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30)) {
+                    val lo = p[i].toInt() and 0xFF; val hi = p[i + 1].toInt() and 0xFF
+                    if (lo == 0x00 && hi == 0x00) return sb.toString()
+                    if (lo == 0xFF && hi == 0xFF) continue
+                    sb.append(((hi shl 8) or lo).toChar())
+                }
+            }
+            return sb.toString()
+        }
+
         /**
          * 重排目录：无 LFN 链的短条目（除 ./.. 与卷标）前注入小写 LFN 链；
          * 已有 LFN 链的组【原样保留全部字节】。返回 (新目录字节, 条目表)。
          */
-        fun rebuild(data: ByteArray, prefix: String): Pair<ByteArray, List<Ent>> {
+        fun rebuild(data: ByteArray, pathPrefix: String): Pair<ByteArray, List<Ent>> {
             val out = java.io.ByteArrayOutputStream()
             val map = ArrayList<Ent>()
             var pendingLfn = ArrayList<ByteArray>()
@@ -155,9 +178,9 @@ object FatLfnInjector {
                 if (first == 0xE5) { pendingLfn = ArrayList(); off += 32; continue }
                 if ((e[0x0B].toInt() and 0xFF) == 0x0F) { pendingLfn.add(e); off += 32; continue }
 
-                // 短条目
-                val name = e.copyOfRange(0, 8).toString(Charsets.US_ASCII).trimEnd(' ')
-                val ext = e.copyOfRange(8, 11).toString(Charsets.US_ASCII).trimEnd(' ')
+                // 短条目（8.3 名以空格填充；防御性同时去除 NUL 填充）
+                val name = e.copyOfRange(0, 8).toString(Charsets.US_ASCII).trimEnd(' ', '\u0000')
+                val ext = e.copyOfRange(8, 11).toString(Charsets.US_ASCII).trimEnd(' ', '\u0000')
                 val short = name + (if (ext.isNotEmpty()) ".$ext" else "")
                 val attr = e[0x0B].toInt() and 0xFF
                 val clus = (e[0x1A].toInt() and 0xFF) or ((e[0x1B].toInt() and 0xFF) shl 8) or
@@ -165,22 +188,15 @@ object FatLfnInjector {
 
                 var logical: String
                 if (pendingLfn.isNotEmpty()) {
-                    // 已有 LFN：原样保留全部字节
+                    // 已有 LFN：原样保留全部字节（mcopy 写的链是正确性基准）
                     pendingLfn.forEach { out.write(it) }
-                    val sb = StringBuilder()
-                    outer@ for (p in pendingLfn) {
-                        for (i in intArrayOf(1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30)) {
-                            val lo = p[i].toInt() and 0xFF; val hi = p[i + 1].toInt() and 0xFF
-                            if ((lo == 0x00 && hi == 0x00) || (lo == 0xFF && hi == 0xFF)) break@outer
-                            sb.append(((hi shl 8) or lo).toChar())
-                        }
-                    }
-                    logical = sb.toString().lowercase()
+                    logical = assembleLfn(pendingLfn).lowercase()
                 } else if (short != "." && short != ".." && (attr and 0x08) == 0) {
-                    // 无 LFN：注入小写长名链
-                    lfnBlocks(prefix + short.lowercase(), checksum11(e.copyOfRange(0, 11))).forEach { out.write(it) }
+                    // v2.2.5 修复③：注入名 = 短名小写（不带任何路径前缀）
+                    val lfnName = short.lowercase()
+                    lfnBlocks(lfnName, checksum11(e.copyOfRange(0, 11))).forEach { out.write(it) }
                     injected++
-                    logical = short.lowercase()
+                    logical = lfnName
                 } else {
                     logical = short.lowercase()
                 }

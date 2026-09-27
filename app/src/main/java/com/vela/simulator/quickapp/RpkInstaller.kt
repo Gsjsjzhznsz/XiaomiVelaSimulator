@@ -28,16 +28,19 @@ import java.io.File
  * （重部署内置干净 data.img + 从 files/quickapps 备份恢复用户包）；
  * ③ 安装/读取/卸载失败同样触发自动修复。
  *
- * v2.2.4 根因闭环（桌面 e2e + guest 逐级探测实锤）：预解包路线 v2.2.2 被
- * 误判废弃，真正根因是三层叠加：① NuttX FAT 查找对 8.3 条目是原始字节
- * 大小写敏感（/data/RESOURCE 可查，/data/resource ENOENT）；② 小写字节的
- * 8.3 条目被视为非法，LFN 长名链是唯一能命中小写查找的形态；③ vapp_main.c
- * 的解包树路径是小写 /data/vapps/<pkg>，因此永远查不到 mtools 写的大写短名
- * 树 → 每次首启都走解包写盘 → 触发固件 FAT 半更新缺陷 → 数据盘亚损坏
- * （mtools 宽容可读、NuttX 拒绝）→ vapp 报 package not found → 黑屏。
- * 修复：install = mdel 先删 + mcopy 写 rpk + 宿主预解包到 ::/vapps/<pkg> +
- * FatLfnInjector 注入小写 LFN 长名链 → vapp 命中路径#1 零写启动，guest 不再
- * 写数据盘，损坏代码路径不可达（e2e 实证整周期镜像字节零变化）。
+ * v2.2.4 根因闭环（预解包 + LFN 注入）在真机仍失效。v2.2.5 决定性定位
+ * （桌面 20+ 组对照实验 + 真机日志，详见 worklog v2.2.5-fix）：固件 NuttX FAT
+ * 的 LFN 长名打开存在「绝对路径长度 ≥48 字符即绑定错误 dirent（起始簇=0）→
+ * 首读 EIO」缺陷。vapp 两条包查找路径都带固定前缀（/data/RESOURCE/PACKAGE/ =
+ * 23 字符），真实包名 28 字符 → 路径 55 字符深处失败区 → package not found。
+ * 另：Java 版 FatLfnInjector 有三缺陷（块序颠倒/逻辑名截断/路径前缀混入），
+ * 已修复（v2.2.4 桌面 e2e 验证的是已丢失的 python 配方，出货 Java 版从未
+ * 在真实镜像上验证过 —— 教训：配方验证≠出货运的代码验证）。
+ * v2.2.5 修复：磁盘层身份改用 QuickAppIds.safeId（12 字符，最长路径 39 字符，
+ * 远离 48 边界）+ 修复版 FatLfnInjector（1 段 LFN 注入，全在已实证安全区）。
+ * install = mdel 先删 + mcopy 写 ::/resource/package/<safeId>.rpk + 宿主预解包
+ * 到 ::/vapps/<safeId> + LFN 注入 → vapp 命中路径#1 零写启动（e2e 实证双轮
+ * 启动整周期镜像字节零变化，JS 工厂被调用）。
  */
 object RpkInstaller {
 
@@ -48,9 +51,10 @@ object RpkInstaller {
         "error reading fat", "cannot initialize", "non ms-dos disk", "too big(",
     ).any { out.lowercase().contains(it) }
 
-    /** 数据盘中解析出的 vapp 包 */
+    /** 数据盘中解析出的 vapp 包（packageId = manifest 真实包名，safeId = 磁盘层短 ID） */
     data class VmPackage(
         val packageId: String,
+        val safeId: String,
         val name: String,
         val versionName: String,
         val sizeBytes: Long,
@@ -95,16 +99,18 @@ object RpkInstaller {
     }
 
     /**
-     * 安装 rpk 到数据盘（同名覆盖 = 升级，v2.2.4 起每次都是干净重写）。
+     * 安装 rpk 到数据盘（磁盘层用 safeId，同名覆盖 = 升级，每次都是干净重写）。
+     * 返回 safeId（启动 auto-command、卸载、launch_apps 记录都用它）。
      *
      * 流程：
-     *  ① mdel 旧 .rpk + mdeltree 旧解包树（忽略不存在错误）——v2.2.2 教训：
-     *     mcopy -n 在条目已存在/已损坏时行为随 mtools 版本漂移（桌面 rc=1、
-     *     Termux 静默跳过），损坏条目永不重写 → 先删后写，行为确定；
-     *  ② mcopy 写 ::/resource/package/<pkg>.rpk（vapp 路径#2 备用 + 工坊列表用）；
-     *  ③ 宿主解包到临时目录 → mcopy -s 整树到 ::/vapps/<pkg>（vapp 路径#1）；
-     *  ④ FatLfnInjector 给 /vapps 子树注入小写 LFN 长名链（NuttX 大小写敏感，
-     *     无 LFN 则小写查找永不命中）→ vapp 零写启动，guest 不再写盘；
+     *  ① mdel 旧 <safeId>.rpk + mdeltree 旧解包树（忽略不存在错误）——先删后写，
+     *     规避 mcopy 覆盖行为随 mtools 版本漂移；
+     *  ② mcopy 写 ::/resource/package/<safeId>.rpk（vapp 路径#2 备用 + 工坊列表用，
+     *     mcopy 自动写的 2 段 LFN 在已实证安全区）；
+     *  ③ 宿主解包到临时目录 → mcopy -s 整树到 ::/vapps/<safeId>（vapp 路径#1）；
+     *  ④ FatLfnInjector（v2.2.5 修复版）给 /vapps 子树内 8.3 小写条目注入 1 段
+     *     LFN 长名链（NuttX 大小写敏感，无 LFN 则小写查找永不命中）→ vapp 零写
+     *     启动，guest 不再写盘；
      *  ⑤ 回读校验 manifest 的 package 字段一致才算成功。
      */
     suspend fun install(
@@ -122,20 +128,22 @@ object RpkInstaller {
             val pkgId = parsed.packageId
             check(pkgId.isNotBlank()) { "manifest.json 缺少 package 字段（包名）" }
 
+            // v2.2.5: 磁盘层身份 = 安全短 ID（远离固件 LFN 路径长度缺陷）
+            val safeId = QuickAppIds.safeId(pkgId)
             progress?.onStage("清理旧版本 $pkgId…")
             exec(
                 runtime,
                 listOf(bin(runtime, "mdel").absolutePath, "-i", dataDisk.absolutePath,
-                    "::/resource/package/$pkgId.rpk"),
+                    "::/resource/package/$safeId.rpk"),
             )
             exec(
                 runtime,
                 listOf(bin(runtime, "mdeltree").absolutePath, "-i", dataDisk.absolutePath,
-                    "::/vapps/$pkgId"),
+                    "::/vapps/$safeId"),
             )
 
             progress?.onStage("写入 $pkgId.rpk 到数据盘…")
-            val dest = "::/resource/package/$pkgId.rpk"
+            val dest = "::/resource/package/$safeId.rpk"
             val (code, out) = exec(
                 runtime,
                 listOf(bin(runtime, "mcopy").absolutePath, "-i", dataDisk.absolutePath, "-m", rpkFile.absolutePath, dest),
@@ -145,11 +153,11 @@ object RpkInstaller {
             // 宿主预解包 → ::/vapps/<pkg>（vapp 路径#1 零写启动）
             progress?.onStage("预解包 $pkgId（虚拟机内零写启动）…")
             val unpackDir = File(runtime.tmpDir, "rpk-unpack").apply { deleteRecursively(); mkdirs() }
-            unzipTo(rpkFile, File(unpackDir, pkgId))
+            unzipTo(rpkFile, File(unpackDir, safeId))
             val (c2, o2) = exec(
                 runtime,
                 listOf(bin(runtime, "mcopy").absolutePath, "-i", dataDisk.absolutePath, "-n", "-s",
-                    File(unpackDir, pkgId).absolutePath, "::/vapps/$pkgId"),
+                    File(unpackDir, safeId).absolutePath, "::/vapps/$safeId"),
             )
             check(c2 == 0) { "预解包写入失败: ${o2.trim().take(300)}" }
             unpackDir.deleteRecursively()
@@ -161,12 +169,12 @@ object RpkInstaller {
                 .onFailure { FileLogger.w("rpk", "LFN 注入失败（降级为解包启动）: ${it.message}") }
 
             // 回读校验：从镜像内读出的包能解析出一致 packageId
-            val back = readFromDisk(runtime, dataDisk, "$pkgId.rpk")
+            val back = exportRpk(runtime, dataDisk, "$safeId.rpk")
             check(back != null) { "写入后回读失败（数据盘空间不足或镜像损坏）" }
             val backParsed = RpkManager.parse(back).getOrNull()
             check(backParsed?.packageId == pkgId) { "回读包校验不一致，安装失败" }
             progress?.onStage("安装完成: $pkgId")
-            pkgId
+            safeId
         }
     }
 
@@ -215,14 +223,15 @@ object RpkInstaller {
         return (code == 0) to out
     }
 
-    /** 从数据盘提取 rpk 到本地临时文件（校验/详情用） */
-    private fun readFromDisk(runtime: QemuRuntime, dataDisk: File, fileName: String): File? {
+    /** 从数据盘提取 rpk 到本地临时文件（迁移/校验用；entryName = 盘内文件名）。
+     *  v2.2.5 公开：旧格式包（真实包名命名）启动前需导出重装迁移。 */
+    fun exportRpk(runtime: QemuRuntime, dataDisk: File, entryName: String): File? {
         val outDir = File(runtime.tmpDir, "rpk-read").apply { deleteRecursively(); mkdirs() }
         val (code, _) = exec(
             runtime,
             listOf(
                 bin(runtime, "mcopy").absolutePath, "-i", dataDisk.absolutePath, "-n",
-                "::/resource/package/$fileName", outDir.absolutePath,
+                "::/resource/package/$entryName", outDir.absolutePath,
             ),
         )
         if (code != 0) return null
@@ -261,8 +270,14 @@ object RpkInstaller {
             files.sortedBy { it.name }.mapNotNull { f ->
                 runCatching {
                     val p = RpkManager.parse(f).getOrNull() ?: return@runCatching null
+                    // v2.2.5: 磁盘文件名 = safeId.rpk；manifest 里的 package = 真实包名。
+                    // v2.2.4 及更早版本安装的旧包文件名 = 真实包名.rpk，safeId 兼容回退
+                    val stem = f.nameWithoutExtension
+                    val safeId = if (stem.startsWith("qa") && stem.length == 12) stem
+                                 else QuickAppIds.safeId(p.packageId.ifBlank { stem })
                     VmPackage(
-                        packageId = p.packageId.ifBlank { f.nameWithoutExtension },
+                        packageId = p.packageId.ifBlank { stem },
+                        safeId = safeId,
                         name = p.name,
                         versionName = p.versionName,
                         sizeBytes = f.length(),
@@ -274,22 +289,21 @@ object RpkInstaller {
         }
     }
 
-    /** 从数据盘移除包（内置 com.vela.demo 允许移除；重新部署内置镜像即可恢复）。
-     *  v2.2.1: 同时清理解包树 ::/vapps/<pkg>（vapp 路径#1 优先用解包树，
-     *  只删 .rpk 的话包在「卸载」后仍能启动）。v2.2.2 起解包树由宿主预解包产生。 */
+    /** 从数据盘移除包（v2.2.5 起参数 = safeId，即 VmPackage.safeId / install 返回值）。
+     *  同时清理解包树 ::/vapps/<safeId>（只删 .rpk 的话包在「卸载」后仍能启动）。 */
     suspend fun remove(
         runtime: QemuRuntime,
         dataDisk: File,
-        packageId: String,
+        safeId: String,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             ensureTools(runtime).getOrThrow()
-            check(packageId.isNotBlank()) { "包名为空" }
+            check(safeId.isNotBlank()) { "包名为空" }
             val (code, out) = exec(
                 runtime,
                 listOf(
                     bin(runtime, "mdel").absolutePath, "-i", dataDisk.absolutePath,
-                    "::/resource/package/$packageId.rpk",
+                    "::/resource/package/$safeId.rpk",
                 ),
             )
             check(code == 0) { "mdel 删除失败: ${out.trim().take(300)}" }
@@ -298,7 +312,7 @@ object RpkInstaller {
                 runtime,
                 listOf(
                     bin(runtime, "mdeltree").absolutePath, "-i", dataDisk.absolutePath,
-                    "::/vapps/$packageId",
+                    "::/vapps/$safeId",
                 ),
             )
             Unit

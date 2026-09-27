@@ -358,9 +358,8 @@ fun QuickAppScreen(
                         busy = diskBusy,
                         canWrite = runningCount == 0 && runtimeState.installed,
                         onLaunch = { p ->
-                            vm.setLaunchApp(tpl.id, p.packageId)
-                            vm.startSession(tpl, p.packageId)
-                            onRunInVm(tpl.id)
+                            // v2.2.5: 经 safeId 启动；旧格式包自动迁移重装（固件 LFN 路径长度缺陷）
+                            vm.launchVmPackage(tpl, p) { onRunInVm(tpl.id) }
                         },
                         onRemove = { vm.removeRpkFromVm(it) },
                     )
@@ -507,7 +506,7 @@ private fun VmPackageListCard(
                     )
                 }
                 androidx.compose.material3.TextButton(onClick = { onLaunch(p) }) { Text("启动") }
-                IconButton(onClick = { onRemove(p.packageId) }, enabled = canWrite) {
+                IconButton(onClick = { onRemove(p.safeId) }, enabled = canWrite) {
                     Icon(
                         Icons.Filled.Delete, "卸载",
                         tint = if (canWrite) VelaRed else Color(0xFF55555F),
