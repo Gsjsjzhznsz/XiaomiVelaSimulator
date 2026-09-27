@@ -295,3 +295,69 @@ Cannot initialize '::'
 09-27 19:48:26.261 I/session: 停止会话
 09-27 19:48:26.262 I/session: 已结束全部虚拟机（1 台）
 09-27 19:48:27.474 I/session: QEMU 退出 code=0
+09-27 22:22:46.286 I/app: ===== VELA Simulator 日志会话开始 20260927-222246 =====
+09-27 22:22:46.294 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-27 22:22:46.296 I/app: CrashGuard 已安装
+09-27 22:22:46.337 I/app: VelaApp.onCreate
+09-27 22:22:46.502 I/app: MainActivity.onCreate
+09-27 22:22:47.563 I/templates: 模板加载完成: 16 个
+09-27 22:22:51.926 I/rpk: 数据盘包列表: com.vela.demo
+09-27 22:22:59.456 W/rpk: LFN 注入失败（降级为解包启动）: 目录重排溢出（条目过多）
+09-27 22:22:59.549 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-27 22:22:59.922 I/session: 会话日志: session-20260927-222259.log
+09-27 22:22:59.923 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-27 22:22:59.928 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:38591,server -vnc 127.0.0.1:38033 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 22:23:01.239 I/vnc: desktop-resize 432x514 (redmi-watch-5-esim)
+09-27 22:23:05.133 W/rpk: guest 故障(package_not_found)，自动自愈后重启 io.github.gsjsjzhznsz.bandqq
+09-27 22:23:14.237 I/rpk: 数据盘包列表: com.vela.demo
+09-27 22:23:17.208 I/session: 停止会话
+09-27 22:23:18.444 I/session: QEMU 退出 code=0
+09-27 22:23:18.621 W/rpk: DiskDoctor: 数据盘 FAT 损坏，开始自动修复
+09-27 22:23:19.172 I/rpk: LFN 注入完成: 43 条
+09-27 22:23:19.217 I/rpk: DiskDoctor: 修复完成，恢复 1/1 个用户包
+09-27 22:23:19.218 I/rpk: 自愈完成，重新启动会话 redmi-watch-5-esim launch=io.github.gsjsjzhznsz.bandqq
+09-27 22:23:19.218 I/session: 停止会话
+09-27 22:23:19.219 I/session: 会话结束
+09-27 22:23:19.302 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-27 22:23:19.556 I/session: 会话日志: session-20260927-222319.log
+09-27 22:23:19.557 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-27 22:23:19.559 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:40827,server -vnc 127.0.0.1:38599 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 22:23:20.893 I/vnc: desktop-resize 432x514 (redmi-watch-5-esim)
+09-27 22:23:24.814 W/rpk: guest 故障(package_not_found)，自动自愈后重启 io.github.gsjsjzhznsz.bandqq
+09-27 22:23:31.177 I/rpk: 数据盘包列表: com.vela.demo
+09-27 22:23:36.878 I/session: 停止会话
+09-27 22:23:38.107 I/session: QEMU 退出 code=0
+09-27 22:23:38.178 W/rpk: DiskDoctor: 数据盘 FAT 损坏，开始自动修复
+09-27 22:23:38.584 I/rpk: LFN 注入完成: 43 条
+09-27 22:23:38.647 I/rpk: DiskDoctor: 修复完成，恢复 1/1 个用户包
+09-27 22:23:38.648 I/rpk: 自愈完成，重新启动会话 redmi-watch-5-esim launch=io.github.gsjsjzhznsz.bandqq
+09-27 22:23:38.648 I/session: 停止会话
+09-27 22:23:38.648 I/session: 会话结束
+09-27 22:23:38.700 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-27 22:23:38.959 I/session: 会话日志: session-20260927-222338.log
+09-27 22:23:38.960 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-27 22:23:38.962 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:33989,server -vnc 127.0.0.1:28151 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 22:23:39.486 I/session: 停止会话
+09-27 22:23:39.487 I/session: 已结束全部虚拟机（1 台）
+09-27 22:23:40.704 I/session: QEMU 退出 code=0
+09-27 22:23:40.959 I/rpk: 数据盘包列表: com.vela.demo
+09-27 22:23:42.779 I/session: 停止会话
+09-27 22:23:42.780 I/session: 会话结束
+09-27 22:23:42.943 I/session: 会话日志: session-20260927-222342.log
+09-27 22:23:42.944 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-27 22:23:42.946 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:37197,server -vnc 127.0.0.1:37163 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 22:23:44.229 I/vnc: desktop-resize 432x514 (redmi-watch-5-esim)
+09-27 22:24:02.458 I/session: 停止会话
+09-27 22:24:02.461 I/session: 已结束全部虚拟机（1 台）
+09-27 22:24:03.705 I/session: QEMU 退出 code=0
+09-27 22:24:04.082 I/rpk: 数据盘包列表: com.vela.demo
+09-27 22:24:18.120 I/rpk: LFN 注入完成: 43 条
+09-27 22:24:18.168 I/rpk: rpk 安装完成: io.github.gsjsjzhznsz.bandqq
+09-27 22:24:18.195 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-27 22:24:19.718 I/session: 停止会话
+09-27 22:24:19.719 I/session: 会话结束
+09-27 22:24:20.105 I/session: 会话日志: session-20260927-222420.log
+09-27 22:24:20.106 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-27 22:24:20.108 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:38801,server -vnc 127.0.0.1:39193 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 22:24:21.434 I/vnc: desktop-resize 432x514 (redmi-watch-5-esim)
+09-27 22:24:25.369 E/rpk: guest 故障(package_not_found)且自愈次数已达上限，停止自动重启
