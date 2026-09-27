@@ -1,0 +1,7 @@
+===== 会话: Vela vApp 演示 · 圆表 (内置固件) =====
+[qemu-cmd] /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a15 -smp 1 -m 512M -device virtio-gpu-device,xres=466,yres=466 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006010e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:36275,server -vnc 127.0.0.1:40001 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+[qemu] qemu-system-arm: -serial tcp:127.0.0.1:36275,server: info: QEMU waiting for connection on: disconnected:tcp:127.0.0.1:36275,server=on
+[serial] 已连接串口 tcp:36275
+[vnc] 连接尝试 #1 失败: failed to connect to /127.0.0.1 (port 45901) from /127.0.0.1 (port 36616) after 2000ms: isConnected failed: ECONNREFUSED (Connection refused)（持续重试中，等待 QEMU VNC 端口就绪）
+[vnc] 已连接 127.0.0.1:45901（第 1 轮，经 2 次尝试）
+[vnc] 服务器初始尺寸 640x480（模板期望 466x466，guest 图形就绪后自动切换）
