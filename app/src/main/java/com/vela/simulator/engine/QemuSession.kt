@@ -69,6 +69,9 @@ class QemuSession(
     /** v2.1.1: vapp 自动命令重试次数（防慢机丢命令，最多 2 次） */
     private var autoRetryCount = 0
 
+    /** v2.2: 本次会话要启动的 vapp 包名；空 = 用模板默认（com.vela.demo）。工坊 rpk 启动时设置 */
+    var launchApp: String? = null
+
     /** v2.1.2: 串口是否收到过任何 guest 字节（静默诊断用） */
     private var serialBytesSeen = false
 
@@ -93,14 +96,14 @@ class QemuSession(
     }
 
     /**
-     * v0.3.0: 检测 NSH 提示符后自动执行模板命令（如 lvgldemo 启动 LVGL 界面）。
+     * v0.3.0: 检测 NSH 提示符后自动执行模板命令（如 lvgldemo / vapp 启动界面）。
      * 提示符不携带换行，所以同时检查未决缓冲 pendingSerial；命中后延时发送，
      * 确保 shell 已就绪可读。
      * v2.1: 支持 ";" 分隔的多条命令（如 vapp 固件先 mount 数据盘再启动 vapp），
      * 逐条间隔 2.5s 发送，确保前一条在 guest 侧执行完毕。
      */
     private fun maybeAutoCommand() {
-        val cmd = template.qemu.autoCommand.trim()
+        val cmd = effectiveAutoCommand(template.qemu.autoCommand, launchApp).trim()
         if (cmd.isEmpty() || autoCommandSent) return
         val tail = pendingSerial + _consoleLines.value.takeLast(2).joinToString(" ")
         if (!tail.contains("nsh>")) return
@@ -390,5 +393,18 @@ class QemuSession(
         logPump?.cancel()
         scope?.cancel()
         FileLogger.endSessionLog()
+    }
+
+    companion object {
+        /**
+         * v2.2: 计算实际下发的自动命令 —— 指定 launchApp 时把
+         * "vapp hap://app/<pkg>" 中的包名替换为目标包（工坊 rpk 在虚拟机内执行）。
+         * 其余命令（mount 等）原样保留；未指定或模板命令不含 vapp URL 时原样返回。
+         * 纯函数（单测锁定替换语义）。
+         */
+        fun effectiveAutoCommand(cmd: String, launchApp: String?): String {
+            if (launchApp.isNullOrBlank()) return cmd
+            return cmd.replace(Regex("(vapp\\s+hap://app/)[A-Za-z0-9._\\-]+"), "$1$launchApp")
+        }
     }
 }

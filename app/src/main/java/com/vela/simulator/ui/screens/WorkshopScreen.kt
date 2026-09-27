@@ -25,8 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.InstallMobile
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -37,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -95,16 +98,16 @@ fun WorkshopScreen(
         Spacer(Modifier.height(inner.calculateTopPadding()))
         Text("模拟工坊", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "快应用 (.rpk) 与表盘 (.bin) 的包解析与设备外形模拟",
+            "快应用 (.rpk) 真机执行 + 表盘 (.bin) 解析预览",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
         )
 
         FeatureCard(
             icon = { Icon(Icons.Filled.Extension, null, tint = VelaOrange, modifier = Modifier.size(34.dp)) },
-            title = "快应用模拟",
-            desc = "导入 .rpk 包：解析 manifest 清单、图标、页面路由、i18n 字符串表，" +
-                    "并在设备外形内模拟启动画面与页面跳转。",
+            title = "快应用 · 虚拟机真实运行",
+            desc = "导入 .rpk 包：一键装入虚拟机数据盘，由内置 vapp 运行时" +
+                    "（QuickJS + LVGL）真实渲染执行；支持解析清单/图标/路由/i18n 与设备外形预览。",
             onClick = onOpenQuickApp,
         )
         Spacer(Modifier.height(12.dp))
@@ -118,8 +121,9 @@ fun WorkshopScreen(
         Spacer(Modifier.height(16.dp))
         Card(colors = CardDefaults.cardColors(containerColor = VelaSurface), shape = RoundedCornerShape(16.dp)) {
             Text(
-                "说明：快应用的 JS 业务逻辑与表盘的私有布局指令需要官方引擎才能完整执行，" +
-                        "本工坊提供的是包级解析 + 外形模拟预览；解析结果可用于开发期的包体检查与资源审阅。",
+                "说明：v2.2 起全部设备模板统一运行内置 vapp 固件，快应用在虚拟机内" +
+                        "真实执行（不再是路由占位模拟）；数据盘包列表对所有模板通用，" +
+                        "写入需先停止运行中的虚拟机。",
                 style = MaterialTheme.typography.bodySmall,
                 color = VelaTextDim,
                 modifier = Modifier.padding(14.dp),
@@ -204,16 +208,33 @@ fun TemplateChips(
     }
 }
 
-/* ===================== 快应用模拟 ===================== */
+/* ===================== 快应用 · 虚拟机真实运行 ===================== */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuickAppScreen(vm: MainViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun QuickAppScreen(
+    vm: MainViewModel,
+    onBack: () -> Unit,
+    onRunInVm: (String) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val state by vm.quickAppState.collectAsState()
     val templates by vm.templateList.collectAsState()
+    val vmPackages by vm.vmPackages.collectAsState()
+    val vmInstall by vm.vmInstallState.collectAsState()
+    val diskBusy by vm.vmDiskBusy.collectAsState()
+    val runtimeState by vm.runtimeState.collectAsState()
+    val sessions by vm.sessionState.collectAsState()
+    val runningCount = sessions.values.count {
+        it.state.value == com.vela.simulator.engine.QemuSession.State.RUNNING ||
+            it.state.value == com.vela.simulator.engine.QemuSession.State.BOOTING
+    }
     var templateId by remember { mutableStateOf<String?>(null) }
     var launched by remember { mutableStateOf(false) }
     var currentPage by remember { mutableStateOf(0) }
+
+    // 进入页面/返回时刷新数据盘包列表
+    LaunchedEffect(Unit) { vm.refreshVmPackages() }
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -225,7 +246,7 @@ fun QuickAppScreen(vm: MainViewModel, onBack: () -> Unit, modifier: Modifier = M
     Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
-            Text("快应用模拟 (.rpk)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text("快应用 · 虚拟机运行", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             Button(onClick = { pick.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }, enabled = !state.busy) {
                 Icon(Icons.Filled.InstallMobile, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -246,10 +267,84 @@ fun QuickAppScreen(vm: MainViewModel, onBack: () -> Unit, modifier: Modifier = M
                 val tpl = templates.firstOrNull { it.first.id == (templateId ?: templates.firstOrNull()?.first?.id) }?.first
                 if (tpl != null) {
                     Spacer(Modifier.height(8.dp))
+                    Text(
+                        "选择目标设备（画面按其屏幕形状/分辨率自适应）",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = VelaTextDim,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
                     TemplateChips(templates, tpl.id) { templateId = it; launched = false }
                     Spacer(Modifier.height(12.dp))
 
-                    // 设备外形模拟屏幕
+                    // v2.2: 虚拟机执行卡 —— 安装到数据盘 + 一键启动
+                    Card(colors = CardDefaults.cardColors(containerColor = VelaSurface), shape = RoundedCornerShape(20.dp)) {
+                        Column(Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.PlayArrow, null, tint = VelaOrange)
+                                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                    Text("在虚拟机中真实运行", style = MaterialTheme.typography.titleMedium)
+                                    Text(
+                                        "${tpl.name} · ${tpl.screen.width}×${tpl.screen.height} · vapp 运行时渲染",
+                                        style = MaterialTheme.typography.bodySmall, color = VelaTextDim,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            when {
+                                !runtimeState.installed -> Text(
+                                    "首次使用请先在「设备」页安装 QEMU 运行环境",
+                                    style = MaterialTheme.typography.bodySmall, color = VelaRed,
+                                )
+                                vmInstall.busy -> {
+                                    LinearProgressIndicator(Modifier.fillMaxWidth(), color = VelaOrange, trackColor = VelaSurfaceHigh)
+                                    Text(vmInstall.stage, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+                                }
+                                else -> {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = { vm.installRpkAndLaunch(tpl, pkg) { onRunInVm(tpl.id) } },
+                                            enabled = !diskBusy,
+                                        ) { Text(if (vmPackages.any { it.packageId == pkg.packageId }) "启动（已安装）" else "安装并启动") }
+                                        OutlinedButton(
+                                            onClick = { vm.installRpkToVm(pkg) },
+                                            enabled = !diskBusy && runningCount == 0,
+                                        ) { Text("仅装入数据盘") }
+                                    }
+                                    if (runningCount > 0) {
+                                        Text(
+                                            "有 $runningCount 台虚拟机运行中：覆盖/卸载数据盘包需先停止全部虚拟机",
+                                            style = MaterialTheme.typography.bodySmall, color = VelaTextDim,
+                                            modifier = Modifier.padding(top = 6.dp),
+                                        )
+                                    }
+                                    vmInstall.installedPkgId?.let {
+                                        Text("已装入数据盘: $it", style = MaterialTheme.typography.bodySmall, color = VelaGreen)
+                                    }
+                                }
+                            }
+                            vmInstall.error?.let {
+                                Text("错误: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+
+                    // 数据盘包列表（全模板通用）
+                    VmPackageListCard(
+                        packages = vmPackages,
+                        busy = diskBusy,
+                        canWrite = runningCount == 0 && runtimeState.installed,
+                        onLaunch = { p ->
+                            vm.setLaunchApp(tpl.id, p.packageId)
+                            vm.startSession(tpl, p.packageId)
+                            onRunInVm(tpl.id)
+                        },
+                        onRemove = { vm.removeRpkFromVm(it) },
+                    )
+                    Spacer(Modifier.height(10.dp))
+
+                    // 设备外形模拟预览（解析预览保留，真实画面以虚拟机为准）
                     DeviceFrame(tpl) {
                         if (!launched) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -266,7 +361,7 @@ fun QuickAppScreen(vm: MainViewModel, onBack: () -> Unit, modifier: Modifier = M
                                 Button(
                                     onClick = { launched = true; currentPage = 0 },
                                     colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = VelaOrange),
-                                ) { Text("启动模拟") }
+                                ) { Text("外形预览") }
                             }
                         } else {
                             QuickAppPageSim(pkg, currentPage) { i -> currentPage = i }
@@ -334,6 +429,65 @@ fun QuickAppScreen(vm: MainViewModel, onBack: () -> Unit, modifier: Modifier = M
                 }
                 Spacer(Modifier.height(20.dp))
             }
+        }
+    }
+}
+
+/** v2.2: 虚拟机数据盘包列表（mtools 读取，含图标/版本；支持启动/卸载） */
+@Composable
+private fun VmPackageListCard(
+    packages: List<com.vela.simulator.quickapp.RpkInstaller.VmPackage>,
+    busy: Boolean,
+    canWrite: Boolean,
+    onLaunch: (com.vela.simulator.quickapp.RpkInstaller.VmPackage) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    InfoCard(title = "虚拟机数据盘 (${packages.size} 个包)") {
+        if (busy) {
+            LinearProgressIndicator(Modifier.fillMaxWidth(), color = VelaOrange, trackColor = VelaSurfaceHigh)
+        } else if (packages.isEmpty()) {
+            Text(
+                "尚未读取到数据盘内容：请先在设备页部署内置镜像，或安装一个 .rpk 包",
+                style = MaterialTheme.typography.bodySmall, color = VelaTextDim,
+            )
+        }
+        packages.forEach { p ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                p.iconFile?.let {
+                    Image(
+                        BitmapFactory.decodeFile(it).asImageBitmap(), null,
+                        Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                } ?: run {
+                    Icon(Icons.Filled.Extension, null, tint = VelaOrange, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(p.name, style = MaterialTheme.typography.bodyMedium, color = Color.White, maxLines = 1)
+                    Text(
+                        "${p.packageId} · v${p.versionName.ifBlank { "-" }} · ${"%.0f".format(p.sizeBytes / 1024f)}KB",
+                        style = MaterialTheme.typography.bodySmall, color = VelaTextDim, maxLines = 1,
+                    )
+                }
+                androidx.compose.material3.TextButton(onClick = { onLaunch(p) }) { Text("启动") }
+                IconButton(onClick = { onRemove(p.packageId) }, enabled = canWrite) {
+                    Icon(
+                        Icons.Filled.Delete, "卸载",
+                        tint = if (canWrite) VelaRed else Color(0xFF55555F),
+                    )
+                }
+            }
+        }
+        if (!canWrite && packages.isNotEmpty()) {
+            Text(
+                "虚拟机运行中无法写数据盘（卸载不可用，启动不受影响）",
+                style = MaterialTheme.typography.bodySmall, color = VelaTextDim,
+            )
         }
     }
 }

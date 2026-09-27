@@ -159,15 +159,18 @@ fun TemplateDetailScreen(
                         Modifier.fillMaxWidth().padding(top = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // v2.2: 内置镜像（asset://）零网络秒级就绪，按钮文案改为部署
+                        val builtinAsset = entry?.files?.isNotEmpty() == true &&
+                            entry.files.all { it.url.startsWith("asset://") }
                         if (!kernelReady && entry != null) {
                             Button(onClick = { vm.downloadImage(entry) }, enabled = !busyHere) {
-                                Text(if (busyHere) "下载中…" else "自动下载")
+                                Text(if (busyHere) (if (builtinAsset) "部署中…" else "下载中…") else (if (builtinAsset) "部署内置镜像" else "自动下载"))
                             }
                         }
                         // v0.2.7：就绪后仍提供重新下载入口（覆盖文件损坏/需换源场景）
                         if (kernelReady && entry != null) {
                             OutlinedButton(onClick = { vm.downloadImage(entry) }, enabled = !busyHere) {
-                                Text("重新下载")
+                                Text(if (builtinAsset) "重新部署" else "重新下载")
                             }
                         }
                         OutlinedButton(onClick = {
@@ -200,8 +203,10 @@ fun TemplateDetailScreen(
                     Text("仿真参数（QEMU）", style = MaterialTheme.typography.labelLarge, color = VelaOrange)
                     SpecRow("机器", "${t.qemu.machine} · ${t.qemu.cpu} ×${t.qemu.smp}")
                     if (!t.qemu.isCortexM) SpecRow("内存", "${t.qemu.memoryMb}MB")
-                    SpecRow("内核", t.qemu.kernel)
+                    SpecRow("内核", t.qemu.kernel + if (t.qemu.bootMode == "raw") "（raw 引导）" else "")
+                    if (t.qemu.dataImg.isNotBlank()) SpecRow("数据盘", t.qemu.dataImg)
                     if (t.qemu.extraArgs.isNotBlank()) SpecRow("附加参数", t.qemu.extraArgs)
+                    if (t.qemu.autoCommand.isNotBlank()) SpecRow("自动命令", t.qemu.autoCommand)
                     if (t.note.isNotBlank()) {
                         Text(t.note, style = MaterialTheme.typography.bodySmall)
                     }

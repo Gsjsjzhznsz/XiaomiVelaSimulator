@@ -36,13 +36,18 @@
     "cpu": "cortex-a7",
     "smp": 1,
     "memoryMb": 512,
-    "kernel": "openvela-qemu-armv7a-full.elf",
+    "kernel": "nuttx.bin",
+    "bootMode": "raw",
+    "entryAddr": 6292192,
+    "dataImg": "data.img",
     "extraArgs": "",
-    "autoCommand": "lvgldemo"
+    "touchInput": true,
+    "autoCommand": "mount -t vfat /dev/virtblk0 /data; vapp hap://app/com.vela.demo"
   },
   "ui": {
     "accentColor": "#FF6900",
     "watchfaceStyle": "digital"
   },
-  "note": "屏幕/硬件参数依据公开资料整理，均为可编辑预设；仿真参数决定 QEMU 启动配置。"
+  "note": "屏幕/硬件参数依据公开资料整理，均为可编辑预设。v2.2 起全机型统一运行内置 vapp 固件（NuttX + QuickJS + LVGL + virtio-gpu，raw 引导 @0x600000 + PC=0x6002e0）：数据盘挂载后自动启动 com.vela.demo 快应用，画面按本模板屏幕形状与分辨率自适应渲染，支持触摸。",
+  "imageId": "vela-vapp-demo"
 }

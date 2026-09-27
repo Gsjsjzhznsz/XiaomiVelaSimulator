@@ -9,12 +9,16 @@ import com.vela.simulator.device.TemplateRepository
 import com.vela.simulator.engine.ImageManager
 import com.vela.simulator.engine.QemuRuntime
 import com.vela.simulator.engine.QemuSession
+import com.vela.simulator.quickapp.RpkInstaller
+import com.vela.simulator.quickapp.RpkManager
 import com.vela.simulator.util.FileLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 
 /** 全局视图模型：模板、运行时安装、镜像下载、仿真会话 */
@@ -161,7 +165,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _sessionState = MutableStateFlow<Map<String, QemuSession>>(emptyMap())
     val sessionState: StateFlow<Map<String, QemuSession>> = _sessionState
 
-    fun startSession(t: DeviceTemplate) {
+    fun startSession(t: DeviceTemplate, launchApp: String? = null) {
         // 同一模板已在运行/启动中：直接复用现有会话（不重复启动）
         sessions[t.id]?.let { cur ->
             val st = cur.state.value
@@ -174,6 +178,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // 多开：不再销毁其他模板的会话（v0.2.6 及之前会 session?.release() 单槽串行）
         val s = QemuSession(runtime, t, images.imagesDir)
         s.console.onText = { text -> s.appendLogRaw(text) }
+        // v2.2: 工坊 rpk 指定启动包 > 用户按模板持久化选择 > 模板默认（com.vela.demo）
+        s.launchApp = launchApp?.takeIf { it.isNotBlank() } ?: launchAppFor(t.id)
         sessions[t.id] = s
         _sessionState.value = sessions.toMap()
         viewModelScope.launch(Dispatchers.IO) {
@@ -243,6 +249,133 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         f.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
         f.absolutePath
     }.getOrNull()
+
+    // ---- v2.2: 虚拟机数据盘 rpk 管理（工坊快应用页） ----
+
+    /** 每模板上次启动的 vapp 包（重启/重开保留），files/launch_apps.json */
+    private val launchAppsFile get() = File(ctx.filesDir, "launch_apps.json")
+
+    private fun loadLaunchApps(): Map<String, String> = runCatching {
+        if (!launchAppsFile.isFile) return@runCatching emptyMap()
+        val obj = kotlinx.serialization.json.Json.parseToJsonElement(launchAppsFile.readText()).jsonObject
+        obj.mapValues { it.value.jsonPrimitive.content }
+    }.getOrDefault(emptyMap())
+
+    private val _launchApps = MutableStateFlow(loadLaunchApps())
+
+    fun launchAppFor(templateId: String): String = _launchApps.value[templateId].orEmpty()
+
+    fun setLaunchApp(templateId: String, appId: String) {
+        _launchApps.value = _launchApps.value + (templateId to appId)
+        runCatching {
+            launchAppsFile.writeText(
+                kotlinx.serialization.json.JsonObject(
+                    _launchApps.value.mapValues { kotlinx.serialization.json.JsonPrimitive(it.value) },
+                ).toString(),
+            )
+        }
+    }
+
+    /** 虚拟机数据盘镜像（全模板共用内置 data.img） */
+    val vmDataDisk: File get() = File(images.imagesDir, "data.img")
+
+    data class VmInstallUiState(
+        val busy: Boolean = false,
+        val stage: String = "",
+        val error: String? = null,
+        val installedPkgId: String? = null,
+    )
+
+    private val _vmInstallState = MutableStateFlow(VmInstallUiState())
+    val vmInstallState: StateFlow<VmInstallUiState> = _vmInstallState
+
+    private val _vmPackages = MutableStateFlow<List<RpkInstaller.VmPackage>>(emptyList())
+    val vmPackages: StateFlow<List<RpkInstaller.VmPackage>> = _vmPackages
+
+    private val _vmDiskBusy = MutableStateFlow(false)
+    val vmDiskBusy: StateFlow<Boolean> = _vmDiskBusy
+
+    /** 刷新数据盘包列表（工坊页进入时/安装卸载后调用） */
+    fun refreshVmPackages() {
+        if (_vmDiskBusy.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _vmDiskBusy.value = true
+            RpkInstaller.list(runtime, vmDataDisk)
+                .onSuccess {
+                    _vmPackages.value = it
+                    FileLogger.i("rpk", "数据盘包列表: ${it.joinToString { p -> p.packageId }}")
+                }
+                .onFailure { FileLogger.w("rpk", "数据盘读取失败: ${it.message}") }
+            _vmDiskBusy.value = false
+        }
+    }
+
+    /** 安装已导入的 rpk 到数据盘；完成后自动刷新列表 */
+    fun installRpkToVm(pkg: RpkManager.QuickAppPackage) {
+        if (_vmInstallState.value.busy) return
+        _vmInstallState.value = VmInstallUiState(busy = true, stage = "准备…")
+        viewModelScope.launch(Dispatchers.IO) {
+            val progress = object : QemuRuntime.Progress {
+                override fun onStage(stage: String) {
+                    _vmInstallState.value = _vmInstallState.value.copy(stage = stage)
+                }
+                override fun onFileProgress(name: String, downloaded: Long, total: Long) {}
+                override fun onLog(line: String) { FileLogger.i("rpk", line) }
+            }
+            RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress)
+                .onSuccess {
+                    FileLogger.i("rpk", "rpk 安装完成: $it")
+                    _vmInstallState.value = VmInstallUiState(installedPkgId = it, stage = "已安装到数据盘")
+                    refreshVmPackages()
+                }
+                .onFailure {
+                    FileLogger.e("rpk", "rpk 安装失败", it)
+                    _vmInstallState.value = VmInstallUiState(error = it.message ?: "安装失败")
+                }
+        }
+    }
+
+    fun removeRpkFromVm(packageId: String) {
+        if (_vmDiskBusy.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _vmDiskBusy.value = true
+            RpkInstaller.remove(runtime, vmDataDisk, packageId)
+                .onFailure { FileLogger.e("rpk", "rpk 卸载失败: $packageId", it) }
+            _vmDiskBusy.value = false
+            refreshVmPackages()
+        }
+    }
+
+    /**
+     * v2.2 工坊主入口：安装 rpk 到数据盘 → 指定模板启动该包 → 回调导航到运行页。
+     * 已装过的包直接启动（跳过写入）；写盘要求当前没有运行中的虚拟机。
+     */
+    fun installRpkAndLaunch(t: DeviceTemplate, pkg: RpkManager.QuickAppPackage, onLaunched: () -> Unit) {
+        if (_vmInstallState.value.busy) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val installed = _vmPackages.value.any { it.packageId == pkg.packageId }
+            val progress = object : QemuRuntime.Progress {
+                override fun onStage(stage: String) {
+                    _vmInstallState.value = _vmInstallState.value.copy(busy = true, stage = stage, error = null)
+                }
+                override fun onFileProgress(name: String, downloaded: Long, total: Long) {}
+                override fun onLog(line: String) { FileLogger.i("rpk", line) }
+            }
+            if (!installed) {
+                _vmInstallState.value = VmInstallUiState(busy = true, stage = "准备…")
+                val r = RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress)
+                if (r.isFailure) {
+                    _vmInstallState.value = VmInstallUiState(error = r.exceptionOrNull()?.message ?: "安装失败")
+                    return@launch
+                }
+                refreshVmPackages()
+            }
+            setLaunchApp(t.id, pkg.packageId)
+            _vmInstallState.value = VmInstallUiState(installedPkgId = pkg.packageId, stage = "已启动 ${t.name}")
+            startSession(t, pkg.packageId)
+            onLaunched()
+        }
+    }
 
     override fun onCleared() {
         sessions.values.forEach { it.release() }

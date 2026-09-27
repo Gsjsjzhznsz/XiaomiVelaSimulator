@@ -1,19 +1,22 @@
 package com.vela.simulator
 
 import com.vela.simulator.device.DeviceTemplate
+import com.vela.simulator.engine.QemuSession
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 /**
- * 内置模板一致性回归测试（v0.3.3）：
+ * 内置模板一致性回归测试。
  *
- * 锁定「手环类模板使用 mps2-an500 纯控制台固件 → VNC 永远显示
- * 'Display output is not active.'（用户反馈：这些镜像没有系统）」的修复：
- * 全部 15 款内置模板必须统一使用 virt 机器 + qemu-armv7a-full 图形固件
- * （LVGL + virtio-gpu + 触摸），并自动执行 lvgldemo 启动界面。
+ * v0.3.3：统一 virt 机器 + 图形固件（修复「手环模板用 mps2 纯控制台固件 →
+ * VNC 永远 Display output is not active」）。
+ * v2.1.0：新增内置 vapp 演示机（raw 引导自有 nuttx.bin）。
+ * v2.2.0：旧 openvela ELF 固件链路全部下线，16 款内置模板统一 raw 引导
+ * 内置 vapp 固件（NuttX + QuickJS + LVGL），自动 mount 数据盘并启动 vapp。
  *
- * 单一通用图形固件 + 按模板注入分辨率 = bandQQ 同款「一个镜像模拟全部设备」思路。
+ * 单一通用固件 + 按模板注入分辨率 = 「一个镜像模拟全部设备」思路。
  */
 class TemplateConsistencyTest {
 
@@ -28,49 +31,74 @@ class TemplateConsistencyTest {
     }
 
     @Test
-    fun `all builtin templates use unified graphics firmware`() {
+    fun `all builtin templates use unified vapp raw boot firmware`() {
         val templates = loadTemplates()
-        // v2.1.0 起新增内置 vapp 演示机（BOOT_RAW 引导自有 nuttx.bin），共 16 款；
-        // 其余模板仍统一 virt + full 图形固件（v0.3.3 回归锁）
         assertTrue("内置模板数量异常（期望 16）: ${templates.size}", templates.size == 16)
-        val graphics = templates.filter { it.qemu.bootMode != DeviceTemplate.QemuSpec.BOOT_RAW }
-        val bad = graphics.filter {
+        val bad = templates.filter {
             it.qemu.machine != DeviceTemplate.QemuSpec.MACHINE_VIRT ||
-                it.qemu.kernel != DeviceTemplate.QemuSpec.KERNEL_OPENVELA_ARMV7A_FULL
+                it.qemu.bootMode != DeviceTemplate.QemuSpec.BOOT_RAW ||
+                it.qemu.kernel != "nuttx.bin" ||
+                it.qemu.dataImg != "data.img" ||
+                it.qemu.entryAddr != 0x6002e0L ||
+                !it.qemu.autoCommand.contains("vapp hap://app/")
         }
         assertTrue(
-            "以下模板未使用 virt + full 图形固件（VNC 将永远无画面）: " +
-                bad.joinToString { "${it.id}(${it.qemu.machine}/${it.qemu.kernel})" },
+            "以下模板未使用内置 vapp 固件链路（raw @0x6002e0 + data.img + vapp 启动命令）: " +
+                bad.joinToString { "${it.id}(${it.qemu.bootMode}/${it.qemu.kernel}/0x${it.qemu.entryAddr.toString(16)})" },
             bad.isEmpty(),
-        )
-        // v2.1.2 回归锁：raw 引导模板必须携带与固件实测一致的入口 PC。
-        // 教训：vela-vapp-demo 一度写成 0x6010e0（正确值 0x6002e0），
-        // CPU 空转 → 串口零输出 → 串口/看门狗/重试链路全部无法生效 → 永久黑屏。
-        val badRaw = templates.filter { it.qemu.bootMode == DeviceTemplate.QemuSpec.BOOT_RAW }
-            .filter {
-                it.qemu.machine != DeviceTemplate.QemuSpec.MACHINE_VIRT ||
-                    it.qemu.entryAddr != 0x6002e0L
-            }
-        assertTrue(
-            "以下 raw 引导模板入口 PC 不是固件实测的 0x6002e0（CPU 将空转，串口/VNC 永久静默）: " +
-                badRaw.joinToString { "${it.id}(0x${it.qemu.entryAddr.toString(16)})" },
-            badRaw.isEmpty(),
         )
     }
 
     @Test
-    fun `all builtin templates auto launch lvgldemo`() {
+    fun `raw boot entry pc matches firmware verified value`() {
+        // v2.1.2 教训：entryAddr 写错（0x6010e0）= CPU 空转，串口/VNC 全静默永久黑屏。
+        // 桌面 A/B 实证唯一正确值 0x6002e0（固件 sha256 79efedee…）。
+        val bad = loadTemplates().filter { it.qemu.entryAddr != 0x6002e0L }
+        assertTrue(
+            "以下模板 raw 引导入口 PC 不是固件实测的 0x6002e0: " +
+                bad.joinToString { "${it.id}(0x${it.qemu.entryAddr.toString(16)})" },
+            bad.isEmpty(),
+        )
+    }
+
+    @Test
+    fun `effectiveAutoCommand replaces vapp package id only`() {
+        // v2.2 工坊启动任意 rpk：仅替换 vapp URL 包名，mount 命令原样保留
+        val cmd = "mount -t vfat /dev/virtblk0 /data; vapp hap://app/com.vela.demo"
+        assertEquals(
+            "mount -t vfat /dev/virtblk0 /data; vapp hap://app/com.example.game",
+            QemuSession.effectiveAutoCommand(cmd, "com.example.game"),
+        )
+        // 未指定包 = 原样返回（含 null 与空白）
+        assertEquals(cmd, QemuSession.effectiveAutoCommand(cmd, null))
+        assertEquals(cmd, QemuSession.effectiveAutoCommand(cmd, ""))
+        // 模板命令不含 vapp URL 时原样返回（旧式 lvgldemo 自定义模板）
+        assertEquals("lvgldemo", QemuSession.effectiveAutoCommand("lvgldemo", "com.x.y"))
+        // 包名含连字符/下划线合法
+        assertEquals(
+            "vapp hap://app/com.foo-bar.baz_q1",
+            QemuSession.effectiveAutoCommand("vapp hap://app/com.vela.demo", "com.foo-bar.baz_q1"),
+        )
+    }
+
+    @Test
+    fun `all builtin templates auto launch vapp`() {
         val noCmd = loadTemplates().filter { it.qemu.autoCommand.isBlank() }
         assertTrue(
             "以下模板未配置自动启动命令（画面将停留在 nsh 提示符）: " +
                 noCmd.joinToString { it.id },
             noCmd.isEmpty(),
         )
+        val noVapp = loadTemplates().filter { !it.qemu.autoCommand.contains("vapp hap://app/") }
+        assertTrue(
+            "以下内置模板未自动启动 vapp 快应用: " + noVapp.joinToString { it.id },
+            noVapp.isEmpty(),
+        )
     }
 
     @Test
     fun `band resolutions survive width alignment`() {
-        // QemuArgsBuilder 将宽度向上对齐到 16 像素；对齐后不得超出合理范围
+        // 宽度对齐（仅 ELF 引导模板适用，raw 引导已跳过对齐）；对齐后不得超出合理范围
         // （否则 VncDisplayView 变形/触摸归一化失真）
         val wrong = loadTemplates().filter {
             val aligned = (it.screen.width + 15) / 16 * 16

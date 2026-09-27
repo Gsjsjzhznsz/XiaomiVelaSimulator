@@ -402,6 +402,67 @@ class QemuRuntime(private val context: Context) {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * v2.2: 按需追加安装运行时附加工具包（如 rpk 数据盘读写所需的 mtools）。
+     * 复用主安装的竞速选源 + 依赖闭包 + 多源容错下载 + 解包机制；
+     * deb 缓存命中（同体积）则跳过下载，解包幂等（覆盖写入）。
+     * 调用方先用二进制存在性判断是否需要调用（mcopy 已在 → 无网络开销）。
+     */
+    suspend fun ensurePackage(pkg: String, progressSink: Progress? = null) = withContext(Dispatchers.IO) {
+        val prevProgress = progress
+        if (progressSink != null) progress = progressSink
+        try {
+            val abi64 = android.os.Build.SUPPORTED_ABIS.firstOrNull()?.contains("64") == true
+            val chosen = probeFastestMirror(abi64)
+                ?: throw IllegalStateException("全部软件源均不可达（${MIRRORS.joinToString()}），无法安装 $pkg")
+            val (mirror, index) = chosen
+            val deps = resolveDeps(index, pkg).filter { it.filename.isNotEmpty() }
+            check(deps.any { it.pkg == pkg }) { "软件源中未找到 $pkg" }
+            progressSink?.onStage("解析 $pkg 依赖 ${deps.size} 个包")
+
+            val cache = File(context.cacheDir, "debs").apply { mkdirs() }
+            val toFetch = deps.filter { p ->
+                val dest = File(cache, p.filename.substringAfterLast('/'))
+                !(dest.exists() && dest.length() == p.size)
+            }
+            val totalBytes = toFetch.sumOf { it.size }.coerceAtLeast(1)
+            val doneBytes = java.util.concurrent.atomic.AtomicLong(0)
+            progressSink?.onFileProgress("$pkg 下载 0/${toFetch.size} 包", 0, totalBytes)
+            val doneCount = java.util.concurrent.atomic.AtomicInteger(0)
+
+            val sem = Semaphore(DOWNLOAD_CONCURRENCY)
+            coroutineScope {
+                toFetch.map { p ->
+                    launch(Dispatchers.IO) {
+                        sem.withPermit {
+                            val dest = File(cache, p.filename.substringAfterLast('/'))
+                            val tmp = File(cache, dest.name + ".part")
+                            progressSink?.onLog("下载 ${p.pkg} (${p.size / 1024} KB)")
+                            downloadMultiMirror(p.filename, tmp, p.size, p.pkg, mirror, MIRRORS.filter { it != mirror }, doneBytes, totalBytes)
+                            if (p.sha256.isNotEmpty()) {
+                                val actual = sha256(tmp)
+                                check(actual.equals(p.sha256, ignoreCase = true)) { "${p.pkg} SHA256 校验失败" }
+                            }
+                            if (!tmp.renameTo(dest)) {
+                                tmp.copyTo(dest, overwrite = true); tmp.delete()
+                            }
+                            progressSink?.onStage("已完成 ${doneCount.incrementAndGet()}/${toFetch.size}: ${p.pkg}")
+                            progressSink?.onFileProgress("$pkg 下载 ${doneCount.get()}/${toFetch.size} 包", doneBytes.get(), totalBytes)
+                        }
+                    }
+                }.joinAll()
+            }
+
+            deps.forEach { p ->
+                val deb = File(cache, p.filename.substringAfterLast('/'))
+                if (deb.isFile) DebExtractor.extract(deb, prefix, TERMUX_PREFIX)
+            }
+            progressSink?.onStage("$pkg 就绪")
+        } finally {
+            progress = prevProgress
+        }
+    }
+
     /** 执行 QEMU 时的环境变量 */
     fun execEnvironment(extra: Map<String, String> = emptyMap()): Map<String, String> = buildMap {
         put("LD_LIBRARY_PATH", "${prefixUsr.absolutePath}/lib")

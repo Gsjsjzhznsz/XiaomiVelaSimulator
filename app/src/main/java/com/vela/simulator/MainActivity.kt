@@ -322,7 +322,14 @@ fun VelaApp(vm: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 OverlayHost(transform = predictiveTransform) {
-                    QuickAppScreen(vm, onBack = { showQuickApp = false })
+                    // v2.2: 工坊 rpk 在虚拟机内启动后切运行页。必须关闭本页 ——
+                    // 本 overlay 绘制层级在 RunScreen 之后（画在其上），
+                    // 不关会把运行页盖住
+                    QuickAppScreen(
+                        vm,
+                        onBack = { showQuickApp = false },
+                        onRunInVm = { showQuickApp = false; runId = it },
+                    )
                 }
             }
 
