@@ -72,6 +72,10 @@ class QemuSession(
     /** v2.2: 本次会话要启动的 vapp 包名；空 = 用模板默认（com.vela.demo）。工坊 rpk 启动时设置 */
     var launchApp: String? = null
 
+    /** v2.2.4: guest 侧故障回调（MainViewModel 用于自动自愈）。
+     *  kind: package_not_found / unpack_failed / slurp_failed / entry_missing */
+    var onGuestFailure: ((String) -> Unit)? = null
+
     /** v2.1.2: 串口是否收到过任何 guest 字节（静默诊断用） */
     private var serialBytesSeen = false
 
@@ -118,6 +122,15 @@ class QemuSession(
                     "快应用包读取失败（数据盘异常）"
             else -> return
         }
+        // v2.2.4: 先通知自愈监听者（MainViewModel 自动修复），再写日志/阶段
+        onGuestFailure?.invoke(
+            when {
+                line.contains("package not found") -> "package_not_found"
+                line.contains("unpack failed") -> "unpack_failed"
+                line.contains("slurp failed") -> "slurp_failed"
+                else -> "entry_missing"
+            }
+        )
         appendLog("[vela] $hint")
         if (!_scanoutReady.value) _bootPhase.value = phase
     }

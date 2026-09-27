@@ -1,6 +1,7 @@
 package com.vela.simulator.quickapp
 
 import com.vela.simulator.engine.QemuRuntime
+import com.vela.simulator.util.FileLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -26,9 +27,17 @@ import java.io.File
  * ② 会话退出后主动健康探测（mdir），命中 FAT 损坏签名立即自动修复
  * （重部署内置干净 data.img + 从 files/quickapps 备份恢复用户包）；
  * ③ 安装/读取/卸载失败同样触发自动修复。
- * 注：曾试验安装时宿主侧预解包到 ::/vapps/<pkg>（让 vapp 零写启动），
- * 实测 vapp 对 mtools 写的 8.3 短名条目无法路径解析（mtools 自身也无法
- * 解析），三轮启动全部回退到重新解包，已废弃该路线。
+ *
+ * v2.2.4 根因闭环（桌面 e2e + guest 逐级探测实锤）：预解包路线 v2.2.2 被
+ * 误判废弃，真正根因是三层叠加：① NuttX FAT 查找对 8.3 条目是原始字节
+ * 大小写敏感（/data/RESOURCE 可查，/data/resource ENOENT）；② 小写字节的
+ * 8.3 条目被视为非法，LFN 长名链是唯一能命中小写查找的形态；③ vapp_main.c
+ * 的解包树路径是小写 /data/vapps/<pkg>，因此永远查不到 mtools 写的大写短名
+ * 树 → 每次首启都走解包写盘 → 触发固件 FAT 半更新缺陷 → 数据盘亚损坏
+ * （mtools 宽容可读、NuttX 拒绝）→ vapp 报 package not found → 黑屏。
+ * 修复：install = mdel 先删 + mcopy 写 rpk + 宿主预解包到 ::/vapps/<pkg> +
+ * FatLfnInjector 注入小写 LFN 长名链 → vapp 命中路径#1 零写启动，guest 不再
+ * 写数据盘，损坏代码路径不可达（e2e 实证整周期镜像字节零变化）。
  */
 object RpkInstaller {
 
@@ -86,10 +95,17 @@ object RpkInstaller {
     }
 
     /**
-     * 安装 rpk 到数据盘 ::/resource/package/<packageId>.rpk（同名覆盖 = 升级）。
-     * v2.2.2: 同时把包内容预解包到 ::/vapps/<packageId>/ —— vapp 启动时发现
-     * 解包树已存在即走零写路径，guest 不再对 FAT 做任何解包写盘（防损坏）。
-     * 写入后回读校验 manifest 的 package 字段一致才算成功。
+     * 安装 rpk 到数据盘（同名覆盖 = 升级，v2.2.4 起每次都是干净重写）。
+     *
+     * 流程：
+     *  ① mdel 旧 .rpk + mdeltree 旧解包树（忽略不存在错误）——v2.2.2 教训：
+     *     mcopy -n 在条目已存在/已损坏时行为随 mtools 版本漂移（桌面 rc=1、
+     *     Termux 静默跳过），损坏条目永不重写 → 先删后写，行为确定；
+     *  ② mcopy 写 ::/resource/package/<pkg>.rpk（vapp 路径#2 备用 + 工坊列表用）；
+     *  ③ 宿主解包到临时目录 → mcopy -s 整树到 ::/vapps/<pkg>（vapp 路径#1）；
+     *  ④ FatLfnInjector 给 /vapps 子树注入小写 LFN 长名链（NuttX 大小写敏感，
+     *     无 LFN 则小写查找永不命中）→ vapp 零写启动，guest 不再写盘；
+     *  ⑤ 回读校验 manifest 的 package 字段一致才算成功。
      */
     suspend fun install(
         runtime: QemuRuntime,
@@ -106,13 +122,43 @@ object RpkInstaller {
             val pkgId = parsed.packageId
             check(pkgId.isNotBlank()) { "manifest.json 缺少 package 字段（包名）" }
 
+            progress?.onStage("清理旧版本 $pkgId…")
+            exec(
+                runtime,
+                listOf(bin(runtime, "mdel").absolutePath, "-i", dataDisk.absolutePath,
+                    "::/resource/package/$pkgId.rpk"),
+            )
+            exec(
+                runtime,
+                listOf(bin(runtime, "mdeltree").absolutePath, "-i", dataDisk.absolutePath,
+                    "::/vapps/$pkgId"),
+            )
+
             progress?.onStage("写入 $pkgId.rpk 到数据盘…")
             val dest = "::/resource/package/$pkgId.rpk"
             val (code, out) = exec(
                 runtime,
-                listOf(bin(runtime, "mcopy").absolutePath, "-i", dataDisk.absolutePath, "-n", "-m", rpkFile.absolutePath, dest),
+                listOf(bin(runtime, "mcopy").absolutePath, "-i", dataDisk.absolutePath, "-m", rpkFile.absolutePath, dest),
             )
             check(code == 0) { "mcopy 写入失败: ${out.trim().take(300)}" }
+
+            // 宿主预解包 → ::/vapps/<pkg>（vapp 路径#1 零写启动）
+            progress?.onStage("预解包 $pkgId（虚拟机内零写启动）…")
+            val unpackDir = File(runtime.tmpDir, "rpk-unpack").apply { deleteRecursively(); mkdirs() }
+            unzipTo(rpkFile, File(unpackDir, pkgId))
+            val (c2, o2) = exec(
+                runtime,
+                listOf(bin(runtime, "mcopy").absolutePath, "-i", dataDisk.absolutePath, "-n", "-s",
+                    File(unpackDir, pkgId).absolutePath, "::/vapps/$pkgId"),
+            )
+            check(c2 == 0) { "预解包写入失败: ${o2.trim().take(300)}" }
+            unpackDir.deleteRecursively()
+
+            // LFN 长名链注入（NuttX 小写查找唯一可命中形态）；失败仅降级为
+            // 路径#2 解包启动（旧行为），不阻断安装
+            runCatching { FatLfnInjector.injectVappsSubtree(dataDisk) }
+                .onSuccess { FileLogger.i("rpk", "LFN 注入完成: ${it.injected} 条") }
+                .onFailure { FileLogger.w("rpk", "LFN 注入失败（降级为解包启动）: ${it.message}") }
 
             // 回读校验：从镜像内读出的包能解析出一致 packageId
             val back = readFromDisk(runtime, dataDisk, "$pkgId.rpk")
@@ -122,6 +168,34 @@ object RpkInstaller {
             progress?.onStage("安装完成: $pkgId")
             pkgId
         }
+    }
+
+    /** 解包 rpk（zip）到目标目录（App 宿主侧，java.util.zip） */
+    private fun unzipTo(zip: File, dest: File) {
+        dest.mkdirs()
+        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
+            var e = zis.nextEntry
+            while (e != null) {
+                val out = File(dest, e.name.normalizePath())
+                if (e.isDirectory) {
+                    out.mkdirs()
+                } else {
+                    out.parentFile?.mkdirs()
+                    out.outputStream().use { zis.copyTo(it) }
+                }
+                zis.closeEntry()
+                e = zis.nextEntry
+            }
+        }
+    }
+
+    private fun String.normalizePath(): String {
+        val parts = split('/').filter { it.isNotEmpty() && it != "." }
+        val out = ArrayList<String>(parts.size)
+        for (p in parts) {
+            if (p == "..") out.removeLastOrNull() else out.add(p)
+        }
+        return out.joinToString("/")
     }
 
     /**

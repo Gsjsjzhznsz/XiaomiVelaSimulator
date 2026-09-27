@@ -184,6 +184,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         s.launchApp = launchApp?.takeIf { it.isNotBlank() } ?: launchAppFor(t.id)
         sessions[t.id] = s
         _sessionState.value = sessions.toMap()
+        // v2.2.4: guest 故障自愈 —— vapp 报 package not found / 解包失败 / 读取失败时，
+        // 数据盘大概率已亚损坏（mtools 宽容可读、NuttX 拒绝）。自动：等会话退出 →
+        // DiskDoctor 修复（重部署 + 备份恢复）→ 自动重启同一包（每会话仅一次，防循环）。
+        // 用户从「重装也没用的黑屏循环」变为无感修复后直接出画。
+        if (s.launchApp != null) {
+            s.onGuestFailure = { kind ->
+                viewModelScope.launch(Dispatchers.IO) { healAndRelaunch(s, t, kind) }
+            }
+        }
         // v2.2.2: 会话退出后数据盘健康自检 —— 命中 FAT 损坏签名立即自动修复
         //（重部署干净镜像 + 恢复备份包），防止用户下一次启动黑屏/安装永久失败
         viewModelScope.launch(Dispatchers.IO) {
@@ -227,6 +236,65 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     s.failWith(it.message ?: "未知错误", it)
                 }
         }
+    }
+
+    /**
+     * v2.2.4: guest 故障自动自愈 + 重启同一包。每模板 10 分钟内最多 2 次（防循环）。
+     * 等待当前会话退出（vapp 故障后 QEMU 通常很快退出；限旆12s）→ 修复数据盘 →
+     * 重新 startSession（新会话对象，若用户已手动重启则跳过）。
+     */
+    private data class HealGuard(var count: Int = 0, var windowStart: Long = 0)
+
+    private val healGuards = HashMap<String, HealGuard>()
+
+    private fun healAllowed(t: DeviceTemplate): Boolean {
+        val g = healGuards.getOrPut(t.id) { HealGuard() }
+        val now = System.currentTimeMillis()
+        if (now - g.windowStart > 10 * 60_000) {
+            g.windowStart = now; g.count = 0
+        }
+        if (g.count >= 2) return false
+        g.count++
+        return true
+    }
+
+    private suspend fun healAndRelaunch(failed: QemuSession, t: DeviceTemplate, kind: String) {
+        if (failed.launchApp == null) return
+        if (!healAllowed(t)) {
+            FileLogger.e("rpk", "guest 故障($kind)且自愈次数已达上限，停止自动重启")
+            _vmInstallState.value = _vmInstallState.value.copy(
+                error = "自动修复未能解决启动失败，请到工坊卸载该包后重装，或到设备详情页重新部署内置镜像",
+            )
+            return
+        }
+        FileLogger.w("rpk", "guest 故障($kind)，自动自愈后重启 ${failed.launchApp}")
+        _vmInstallState.value = _vmInstallState.value.copy(
+            busy = true, stage = "虚拟机内包读取异常，正在自动修复数据盘…", error = null,
+        )
+        // 等当前会话退出（避免写盘竞争）
+        val deadline = System.currentTimeMillis() + 12_000
+        while (System.currentTimeMillis() < deadline) {
+            val st = failed.state.value
+            if (st == QemuSession.State.EXITED || st == QemuSession.State.FAILED || st == QemuSession.State.IDLE) break
+            delay(300)
+        }
+        runCatching { failed.stop() }
+        awaitQemuExit()
+        if (!repairDataDisk()) {
+            FileLogger.e("rpk", "自愈修复失败，保留手动指引")
+            return
+        }
+        refreshVmPackages()
+        // 用户已手动重启了同一模板 → 不再重复启动
+        val cur = sessions[t.id]
+        if (cur != null && cur !== failed &&
+            (cur.state.value == QemuSession.State.RUNNING || cur.state.value == QemuSession.State.BOOTING)) {
+            FileLogger.i("rpk", "自愈期间用户已重启会话，跳过自动重启")
+            return
+        }
+        _vmInstallState.value = _vmInstallState.value.copy(stage = "数据盘已修复，重新启动 ${t.name}…")
+        FileLogger.i("rpk", "自愈完成，重新启动会话 ${t.id} launch=${failed.launchApp}")
+        startSession(t, failed.launchApp)
     }
 
     /**
@@ -527,36 +595,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * v2.2 工坊主入口：安装 rpk 到数据盘 → 指定模板启动该包 → 回调导航到运行页。
-     * 已装过的包直接启动（跳过写入）；写盘前自动停止全部运行中虚拟机（v2.2.1 互斥保护）。
+     * v2.2.4: 不再信任 vmPackages 缓存列表跳过安装 —— 亚损坏条目 mtools 可读但
+     * NuttX 不可见，跳过安装 = 直接黑屏。每次都干净重装（mdel+mcopy+预解包+LFN），
+     * 1~2 秒内完成，同时天然修复旧损伤。
      */
     fun installRpkAndLaunch(t: DeviceTemplate, pkg: RpkManager.QuickAppPackage, onLaunched: () -> Unit) {
         if (_vmInstallState.value.busy) return
         viewModelScope.launch(Dispatchers.IO) {
-            val installed = _vmPackages.value.any { it.packageId == pkg.packageId }
-            if (!installed) {
-                _vmInstallState.value = VmInstallUiState(busy = true, stage = "准备…")
-                prepareDiskExclusive()?.let {
-                    _vmInstallState.value = VmInstallUiState(error = it)
-                    return@launch
-                }
-                val progress = object : QemuRuntime.Progress {
-                    override fun onStage(stage: String) {
-                        _vmInstallState.value = _vmInstallState.value.copy(busy = true, stage = stage, error = null)
-                    }
-                    override fun onFileProgress(name: String, downloaded: Long, total: Long) {}
-                    override fun onLog(line: String) { FileLogger.i("rpk", line) }
-                }
-                val r0 = RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress)
-                val r = if (r0.isFailure && RpkInstaller.isFatCorruptOutput(r0.exceptionOrNull()?.message ?: "")) {
-                    // v2.2.2: FAT 损坏 → 自动修复 + 重试一次
-                    if (repairDataDisk()) RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress) else r0
-                } else r0
-                if (r.isFailure) {
-                    _vmInstallState.value = VmInstallUiState(error = r.exceptionOrNull()?.message ?: "安装失败")
-                    return@launch
-                }
-                refreshVmPackages()
+            _vmInstallState.value = VmInstallUiState(busy = true, stage = "准备…")
+            prepareDiskExclusive()?.let {
+                _vmInstallState.value = VmInstallUiState(error = it)
+                return@launch
             }
+            val progress = object : QemuRuntime.Progress {
+                override fun onStage(stage: String) {
+                    _vmInstallState.value = _vmInstallState.value.copy(busy = true, stage = stage, error = null)
+                }
+                override fun onFileProgress(name: String, downloaded: Long, total: Long) {}
+                override fun onLog(line: String) { FileLogger.i("rpk", line) }
+            }
+            val r0 = RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress)
+            val r = if (r0.isFailure && RpkInstaller.isFatCorruptOutput(r0.exceptionOrNull()?.message ?: "")) {
+                // FAT 损坏 → 自动修复 + 重试一次
+                if (repairDataDisk()) RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress) else r0
+            } else r0
+            if (r.isFailure) {
+                _vmInstallState.value = VmInstallUiState(error = r.exceptionOrNull()?.message ?: "安装失败")
+                return@launch
+            }
+            refreshVmPackages()
             setLaunchApp(t.id, pkg.packageId)
             _vmInstallState.value = VmInstallUiState(installedPkgId = pkg.packageId, stage = "已启动 ${t.name}")
             startSession(t, pkg.packageId)
