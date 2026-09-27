@@ -16,3 +16,139 @@
 09-27 13:29:42.325 I/session: 会话日志: session-20260927-132942.log
 09-27 13:29:42.327 I/session: 开始启动会话 template=vela-vapp-demo machine=virt
 09-27 13:29:42.338 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a15 -smp 1 -m 512M -device virtio-gpu-device,xres=466,yres=466 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006010e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:36275,server -vnc 127.0.0.1:40001 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 14:01:57.935 I/app: ===== VELA Simulator 日志会话开始 20260927-140157 =====
+09-27 14:01:57.943 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-27 14:01:57.945 I/app: CrashGuard 已安装
+09-27 14:01:57.983 I/app: VelaApp.onCreate
+09-27 14:01:58.165 I/app: MainActivity.onCreate
+09-27 14:01:59.176 I/templates: 模板加载完成: 16 个
+09-27 14:02:02.988 I/session: 会话日志: session-20260927-140202.log
+09-27 14:02:02.989 I/session: 开始启动会话 template=vela-vapp-demo machine=virt
+09-27 14:02:02.995 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a15 -smp 1 -m 512M -device virtio-gpu-device,xres=466,yres=466 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:40713,server -vnc 127.0.0.1:30729 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 14:02:04.242 I/vnc: desktop-resize 466x466 (vela-vapp-demo)
+09-27 14:02:28.323 I/session: 停止会话
+09-27 14:02:28.324 I/session: 已结束全部虚拟机（1 台）
+09-27 14:02:28.340 I/session: QEMU 退出 code=0
+09-27 14:44:55.852 I/app: ===== VELA Simulator 日志会话开始 20260927-144455 =====
+09-27 14:44:55.863 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-27 14:44:55.864 I/app: CrashGuard 已安装
+09-27 14:44:55.899 I/app: VelaApp.onCreate
+09-27 14:44:56.083 I/app: MainActivity.onCreate
+09-27 14:44:57.111 I/templates: 模板加载完成: 16 个
+09-27 14:45:13.860 W/runtime: libiconv 经 sjtu 下载失败: Unable to resolve host "mirror.sjtu.edu.cn": No address associated with hostname
+09-27 14:45:13.857 W/runtime: libandroid-support 经 sjtu 下载失败: Unable to resolve host "mirror.sjtu.edu.cn": No address associated with hostname
+09-27 14:45:13.863 W/runtime: mtools 经 sjtu 下载失败: Unable to resolve host "mirror.sjtu.edu.cn": No address associated with hostname
+09-27 14:45:13.874 W/runtime: libiconv 经 official 下载失败: Unable to resolve host "packages.termux.dev": No address associated with hostname
+09-27 14:45:13.874 W/runtime: mtools 经 official 下载失败: Unable to resolve host "packages.termux.dev": No address associated with hostname
+09-27 14:45:13.877 W/runtime: libandroid-support 经 official 下载失败: Unable to resolve host "packages.termux.dev": No address associated with hostname
+09-27 14:45:13.887 W/runtime: mtools 经 bfsu 下载失败: Unable to resolve host "mirrors.bfsu.edu.cn": No address associated with hostname
+09-27 14:45:13.887 W/runtime: libiconv 经 bfsu 下载失败: Unable to resolve host "mirrors.bfsu.edu.cn": No address associated with hostname
+09-27 14:45:13.888 W/runtime: libandroid-support 经 bfsu 下载失败: Unable to resolve host "mirrors.bfsu.edu.cn": No address associated with hostname
+09-27 14:45:13.900 W/runtime: libiconv 经 ustc 下载失败: Unable to resolve host "mirrors.ustc.edu.cn": No address associated with hostname
+09-27 14:45:13.901 W/runtime: mtools 经 ustc 下载失败: Unable to resolve host "mirrors.ustc.edu.cn": No address associated with hostname
+09-27 14:45:13.901 W/runtime: libandroid-support 经 ustc 下载失败: Unable to resolve host "mirrors.ustc.edu.cn": No address associated with hostname
+09-27 14:45:13.912 W/runtime: libiconv 经 nju 下载失败: Unable to resolve host "mirror.nju.edu.cn": No address associated with hostname
+09-27 14:45:13.912 W/runtime: libandroid-support 经 nju 下载失败: Unable to resolve host "mirror.nju.edu.cn": No address associated with hostname
+09-27 14:45:13.914 W/runtime: mtools 经 nju 下载失败: Unable to resolve host "mirror.nju.edu.cn": No address associated with hostname
+09-27 14:45:13.924 W/runtime: libiconv 经 tuna 下载失败: Unable to resolve host "mirrors.tuna.tsinghua.edu.cn": No address associated with hostname
+09-27 14:45:13.924 W/runtime: libandroid-support 经 tuna 下载失败: Unable to resolve host "mirrors.tuna.tsinghua.edu.cn": No address associated with hostname
+09-27 14:45:13.928 W/runtime: mtools 经 tuna 下载失败: Unable to resolve host "mirrors.tuna.tsinghua.edu.cn": No address associated with hostname
+09-27 14:45:13.931 W/rpk: 数据盘读取失败: libiconv 在全部软件源均下载失败: Unable to resolve host "mirrors.tuna.tsinghua.edu.cn": No address associated with hostname
+09-27 14:49:33.530 I/rpk: 软件源 bfsu 不可用: HTTP 403
+09-27 14:49:33.604 I/rpk: 软件源 nju 不可用: HTTP 302
+09-27 14:49:33.779 I/rpk: 软件源 tuna 不可用: HTTP 403
+09-27 14:49:34.170 I/rpk: 竞速选定软件源: sjtu（其余源已取消）
+09-27 14:49:51.149 I/rpk: 下载 mtools (134 KB)
+09-27 14:49:51.149 I/rpk: 下载 libandroid-support (10 KB)
+09-27 14:49:51.149 I/rpk: 下载 libiconv (549 KB)
+09-27 14:49:55.920 I/session: 会话日志: session-20260927-144955.log
+09-27 14:49:55.921 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-27 14:49:55.927 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:39697,server -vnc 127.0.0.1:37103 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-27 14:49:55.956 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-27 14:49:57.243 I/vnc: desktop-resize 432x514 (redmi-watch-5-esim)
+09-27 14:50:14.450 I/session: 停止会话
+09-27 14:50:14.451 I/session: 已结束全部虚拟机（1 台）
+09-27 14:50:14.467 I/session: QEMU 退出 code=0
+09-27 14:50:27.433 W/rpk: 数据盘读取失败: 读取数据盘失败: Cluster # at 6 too big(0xfff0013)
+Probably non MS-DOS disk
+Error reading FAT
+Cannot initialize '::'
+09-27 14:50:27.447 E/crash: 未捕获异常 thread=main
+java.lang.NullPointerException: decodeFile(...) must not be null
+	at com.vela.simulator.ui.screens.WorkshopScreenKt.VmPackageListCard$lambda$0(WorkshopScreen.kt:461)
+	at com.vela.simulator.ui.screens.WorkshopScreenKt.$r8$lambda$_MPpRhdcLNCDVC0Kmun9RbMKvY8(Unknown Source:0)
+	at com.vela.simulator.ui.screens.WorkshopScreenKt$$ExternalSyntheticLambda18.invoke(D8$$SyntheticClass:0)
+	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:131)
+	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke$lambda$0(ComposableLambda.kt:133)
+	at androidx.compose.runtime.internal.ComposableLambdaImpl.$r8$lambda$qz3voikrQeNn5XJEtUlXR2wfzBw(Unknown Source:0)
+	at androidx.compose.runtime.internal.ComposableLambdaImpl$$ExternalSyntheticLambda16.invoke(D8$$SyntheticClass:0)
+	at androidx.compose.runtime.RecomposeScopeImpl.compose(RecomposeScopeImpl.kt:204)
+	at androidx.compose.runtime.GapComposer.recomposeToGroupEnd(GapComposer.kt:1678)
+	at androidx.compose.runtime.GapComposer.skipToGroupEnd(GapComposer.kt:2072)
+	at com.vela.simulator.ui.screens.WorkshopScreenKt.InfoCard(WorkshopScreen.kt:587)
+	at com.vela.simulator.ui.screens.WorkshopScreenKt.VmPackageListCard(WorkshopScreen.kt:445)
+	at com.vela.simulator.ui.screens.WorkshopScreenKt.QuickAppScreen(WorkshopScreen.kt:334)
+	at com.vela.simulator.ui.screens.WorkshopScreenKt.QuickAppScreen$lambda$21(Unknown Source:12)
+	at com.vela.simulator.ui.screens.WorkshopScreenKt.$r8$lambda$vQECkC4Cbl-SbgzFfWVswWpCNnw(Unknown Source:0)
+	at com.vela.simulator.ui.screens.WorkshopScreenKt$$ExternalSyntheticLambda40.invoke(D8$$SyntheticClass:0)
+	at androidx.compose.runtime.RecomposeScopeImpl.compose(RecomposeScopeImpl.kt:204)
+	at androidx.compose.runtime.GapComposer.recomposeToGroupEnd(GapComposer.kt:1678)
+	at androidx.compose.runtime.GapComposer.skipToGroupEnd(GapComposer.kt:2072)
+	at com.vela.simulator.MainActivityKt.VelaApp$lambda$30$0$12(MainActivity.kt:323)
+	at com.vela.simulator.MainActivityKt.$r8$lambda$Cls7oQduAA-YPFkcjNaqPSRZ4KE(Unknown Source:0)
+	at com.vela.simulator.MainActivityKt$$ExternalSyntheticLambda20.invoke(D8$$SyntheticClass:0)
+	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:131)
+	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:52)
+	at androidx.compose.animation.AnimatedVisibilityKt.AnimatedEnterExitImpl(AnimatedVisibility.kt:762)
+	at androidx.compose.animation.AnimatedVisibilityKt$AnimatedEnterExitImpl$4.invoke(Unknown Source:27)
+	at androidx.compose.animation.AnimatedVisibilityKt$AnimatedEnterExitImpl$4.invoke(Unknown Source:10)
+	at androidx.compose.runtime.RecomposeScopeImpl.compose(RecomposeScopeImpl.kt:204)
+	at androidx.compose.runtime.GapComposer.recomposeToGroupEnd(GapComposer.kt:1678)
+	at androidx.compose.runtime.GapComposer.skipCurrentGroup(GapComposer.kt:2014)
+	at androidx.compose.runtime.GapComposer.doCompose-aFTiNEg(GapComposer.kt:2655)
+	at androidx.compose.runtime.GapComposer.recompose-aFTiNEg$runtime(GapComposer.kt:2577)
+	at androidx.compose.runtime.CompositionImpl.recompose(Composition.kt:1164)
+	at androidx.compose.runtime.Recomposer.performRecompose(Recomposer.kt:1318)
+	at androidx.compose.runtime.Recomposer.access$performRecompose(Recomposer.kt:191)
+	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2.invokeSuspend$lambda$2(Recomposer.kt:655)
+	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2.$r8$lambda$sdKIQuFT6MpOW8QdHT9yWSawFoM(Unknown Source:0)
+	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)
+	at androidx.compose.ui.platform.AndroidUiFrameClock$withFrameNanos$2$callback$1.doFrame(AndroidUiFrameClock.android.kt:39)
+	at androidx.compose.ui.platform.AndroidUiDispatcher.performFrameDispatch(AndroidUiDispatcher.android.kt:108)
+	at androidx.compose.ui.platform.AndroidUiDispatcher.access$performFrameDispatch(AndroidUiDispatcher.android.kt:41)
+	at androidx.compose.ui.platform.AndroidUiDispatcher$dispatchCallback$1.doFrame(AndroidUiDispatcher.android.kt:69)
+	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1822)
+	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1833)
+	at android.view.Choreographer.doCallbacks(Choreographer.java:1323)
+	at android.view.Choreographer.doFrame(Choreographer.java:1184)
+	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:1792)
+	at android.os.Handler.handleCallback(Handler.java:959)
+	at android.os.Handler.dispatchMessage(Handler.java:100)
+	at android.os.Looper.loopOnce(Looper.java:249)
+	at android.os.Looper.loop(Looper.java:337)
+	at android.app.ActivityThread.main(ActivityThread.java:9417)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:614)
+	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1005)
+	Suppressed: kotlinx.coroutines.internal.DiagnosticCoroutineContextException: [androidx.compose.runtime.PausableMonotonicFrameClock@114ba71, androidx.compose.ui.platform.MotionDurationScaleImpl@b080056, StandaloneCoroutine{Cancelling}@b0688d7, AndroidUiDispatcher@cc3f5c4]
+
+09-27 14:50:31.823 I/app: ===== VELA Simulator 日志会话开始 20260927-145031 =====
+09-27 14:50:31.831 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-27 14:50:31.833 I/app: CrashGuard 已安装
+09-27 14:50:31.884 I/app: VelaApp.onCreate
+09-27 14:50:32.141 I/app: MainActivity.onCreate
+09-27 14:50:33.600 I/templates: 模板加载完成: 16 个
+09-27 14:50:37.097 W/rpk: 数据盘读取失败: 读取数据盘失败: Cluster # at 6 too big(0xfff0013)
+Probably non MS-DOS disk
+Error reading FAT
+Cannot initialize '::'
+09-27 14:50:53.724 I/app: ===== VELA Simulator 日志会话开始 20260927-145053 =====
+09-27 14:50:53.730 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-27 14:50:53.731 I/app: CrashGuard 已安装
+09-27 14:50:53.764 I/app: VelaApp.onCreate
+09-27 14:50:53.929 I/app: MainActivity.onCreate
+09-27 14:50:54.864 I/templates: 模板加载完成: 16 个
+09-27 14:50:56.346 W/rpk: 数据盘读取失败: 读取数据盘失败: Cluster # at 6 too big(0xfff0013)
+Probably non MS-DOS disk
+Error reading FAT
+Cannot initialize '::'
