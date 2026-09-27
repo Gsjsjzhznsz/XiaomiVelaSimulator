@@ -129,7 +129,7 @@ class ImageManager(private val context: Context) {
                     sem.withPermit {
                         val dest = kernelFile(f.out)
                         if (f.url.startsWith("asset://")) {
-                            copyFromAssets(f.url.removePrefix("asset://"), dest, f.out)
+                            copyFromAssets(f.url.removePrefix("asset://"), dest, f.out, f.sha256)
                         } else {
                             downloadWithFallback(f.url, dest, f.out, f.size)
                         }
@@ -152,11 +152,18 @@ class ImageManager(private val context: Context) {
         progress?.onStage("镜像就绪")
     }
 
-    /** v2.1: 从 APK assets 拷贝内置镜像（asset://images/xxx → images/xxx） */
-    private fun copyFromAssets(assetPath: String, dest: File, label: String) {
+    /** v2.1: 从 APK assets 拷贝内置镜像（asset://images/xxx → images/xxx）
+     *  v2.2.1: 清单含 SHA256 时校验旧文件，不匹配则重新拷贝 —— 修复升级后旧
+     *  损坏镜像永不替换的问题（本版 data.img 重建了 FAT 一致性，必须能覆盖旧文件） */
+    private fun copyFromAssets(assetPath: String, dest: File, label: String, expectSha256: String = "") {
         if (dest.isFile && dest.length() > 0) {
-            progress?.onStage("内置镜像已就绪 $label")
-            return
+            val stale = expectSha256.isNotEmpty() && !verifyKernel(label, expectSha256)
+            if (!stale) {
+                progress?.onStage("内置镜像已就绪 $label")
+                return
+            }
+            progress?.onStage("内置镜像版本更新，重新部署 $label")
+            runCatching { dest.delete() }
         }
         progress?.onStage("部署内置镜像 $label")
         dest.parentFile?.mkdirs()
@@ -164,6 +171,34 @@ class ImageManager(private val context: Context) {
             dest.outputStream().use { ins.copyTo(it) }
         }
         progress?.onLog("内置镜像部署完成: $label")
+    }
+
+    /** v2.2.1: 确保本地镜像与清单一致（asset:// 项 SHA 不符时自动重部署，零网络）。
+     *  返回 true = 本地镜像与清单一致（或无法校验但文件存在）。 */
+    suspend fun ensureAssetsCurrent(entryId: String): Boolean = withContext(Dispatchers.IO) {
+        val entry = loadManifest().images.firstOrNull { it.id == entryId }
+            ?: return@withContext true
+        var allOk = true
+        for (f in entry.files) {
+            if (!f.url.startsWith("asset://")) continue
+            val dest = kernelFile(f.out)
+            if (!dest.isFile || dest.length() <= 0) {
+                copyFromAssets(f.url.removePrefix("asset://"), dest, f.out, f.sha256)
+                allOk = allOk && dest.isFile
+                continue
+            }
+            if (f.sha256.isNotEmpty()) {
+                val actual = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
+                if (!actual.equals(f.sha256, ignoreCase = true)) {
+                    progress?.onStage("数据镜像版本更新，重新部署 ${f.out}")
+                    runCatching { dest.delete() }
+                    copyFromAssets(f.url.removePrefix("asset://"), dest, f.out, f.sha256)
+                    val after = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
+                    if (!after.equals(f.sha256, ignoreCase = true)) allOk = false
+                }
+            }
+        }
+        allOk
     }
 
     /**

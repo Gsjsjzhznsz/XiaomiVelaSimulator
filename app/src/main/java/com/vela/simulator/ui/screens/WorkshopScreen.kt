@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -42,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -267,6 +269,26 @@ fun QuickAppScreen(
                 val tpl = templates.firstOrNull { it.first.id == (templateId ?: templates.firstOrNull()?.first?.id) }?.first
                 if (tpl != null) {
                     Spacer(Modifier.height(8.dp))
+                    // v2.2.1: 显著的错误横幅（原先错误只在执行卡内小字，易被忽略）
+                    vmInstall.error?.let { err ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = VelaRed.copy(alpha = 0.12f)),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Warning, null, tint = VelaRed, modifier = Modifier.size(20.dp))
+                                Text(
+                                    err,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = VelaRed,
+                                    modifier = Modifier.padding(start = 8.dp).weight(1f),
+                                )
+                                TextButton(onClick = { vm.clearVmInstallError() }) { Text("知道了") }
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
                     Text(
                         "选择目标设备（画面按其屏幕形状/分辨率自适应）",
                         style = MaterialTheme.typography.labelMedium,
@@ -308,12 +330,12 @@ fun QuickAppScreen(
                                         ) { Text(if (vmPackages.any { it.packageId == pkg.packageId }) "启动（已安装）" else "安装并启动") }
                                         OutlinedButton(
                                             onClick = { vm.installRpkToVm(pkg) },
-                                            enabled = !diskBusy && runningCount == 0,
-                                        ) { Text("仅装入数据盘") }
+                                            enabled = !diskBusy,
+                                        ) { Text("仅装入数据盘（自动停止虚拟机）") }
                                     }
                                     if (runningCount > 0) {
                                         Text(
-                                            "有 $runningCount 台虚拟机运行中：覆盖/卸载数据盘包需先停止全部虚拟机",
+                                            "有 $runningCount 台虚拟机运行中：写入数据盘前会自动停止它们",
                                             style = MaterialTheme.typography.bodySmall, color = VelaTextDim,
                                             modifier = Modifier.padding(top = 6.dp),
                                         )
@@ -322,9 +344,6 @@ fun QuickAppScreen(
                                         Text("已装入数据盘: $it", style = MaterialTheme.typography.bodySmall, color = VelaGreen)
                                     }
                                 }
-                            }
-                            vmInstall.error?.let {
-                                Text("错误: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -348,13 +367,18 @@ fun QuickAppScreen(
                     DeviceFrame(tpl) {
                         if (!launched) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                pkg.iconFile?.let {
-                                    Image(
-                                        BitmapFactory.decodeFile(it).asImageBitmap(),
-                                        null, Modifier.size(64.dp).clip(RoundedCornerShape(14.dp)),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                    Spacer(Modifier.height(10.dp))
+                                pkg.iconFile?.let { path ->
+                                    // v2.2.1: decodeFile 可能返回 null（重解析期间解包目录被重建）——
+                                    // 原实现直接 .asImageBitmap() 会 NPE 崩溃，加空值回退
+                                    val bmp = remember(path) { BitmapFactory.decodeFile(path) }
+                                    if (bmp != null) {
+                                        Image(
+                                            bmp.asImageBitmap(),
+                                            null, Modifier.size(64.dp).clip(RoundedCornerShape(14.dp)),
+                                            contentScale = ContentScale.Crop,
+                                        )
+                                        Spacer(Modifier.height(10.dp))
+                                    }
                                 }
                                 Text(pkg.name, color = Color.White, style = MaterialTheme.typography.titleSmall)
                                 Spacer(Modifier.height(12.dp))
@@ -369,8 +393,8 @@ fun QuickAppScreen(
                     }
                 }
 
-                // 信息卡
-                InfoCard(title = "包信息") {
+                // 信息卡（v2.2.1: 可折叠，默认收起，缩短页面）
+                ExpandableCard(title = "包信息") {
                     InfoRow("名称", pkg.name)
                     InfoRow("包名", pkg.packageId)
                     InfoRow("版本", "${pkg.versionName} (${pkg.versionCode})")
@@ -382,7 +406,7 @@ fun QuickAppScreen(
                 }
 
                 // 页面路由卡
-                InfoCard(title = "页面路由 (${pkg.pages.size})") {
+                ExpandableCard(title = "页面路由 (${pkg.pages.size})") {
                     pkg.pages.forEachIndexed { i, p ->
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
@@ -412,10 +436,10 @@ fun QuickAppScreen(
                 }
 
                 // i18n 卡
-                if (pkg.i18nLocales.isNotEmpty()) I18nCard(pkg)
+                if (pkg.i18nLocales.isNotEmpty()) ExpandableCard(title = "i18n 字符串表 (${pkg.i18nLocales.size})") { I18nBody(pkg) }
 
                 // 文件清单
-                InfoCard(title = "文件清单 (前 ${pkg.files.size} 项)") {
+                ExpandableCard(title = "文件清单 (前 ${pkg.files.size} 项)") {
                     pkg.files.take(40).forEach { f ->
                         Text(
                             "${f.path}   ${if (f.size > 0) "${f.size}B" else "-"}",
@@ -456,14 +480,19 @@ private fun VmPackageListCard(
                 Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                p.iconFile?.let {
+                // v2.2.1: 图标文件是临时目录解包产物，refresh 后路径可能失效 ——
+                // decodeFile 判空回退到扩展图标（原实现 NPE 崩溃）
+                val icon = if (p.iconFile != null) {
+                    remember(p.iconFile) { BitmapFactory.decodeFile(p.iconFile) }
+                } else null
+                if (icon != null) {
                     Image(
-                        BitmapFactory.decodeFile(it).asImageBitmap(), null,
+                        icon.asImageBitmap(), null,
                         Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)),
                         contentScale = ContentScale.Crop,
                     )
                     Spacer(Modifier.width(8.dp))
-                } ?: run {
+                } else {
                     Icon(Icons.Filled.Extension, null, tint = VelaOrange, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(8.dp))
                 }
@@ -545,14 +574,14 @@ private fun QuickAppPageSim(
     }
 }
 
-/** i18n 字符串表查看 */
+/** i18n 字符串表内容（v2.2.1: 并入可折叠卡，原独立卡头移除） */
 @Composable
-private fun I18nCard(pkg: com.vela.simulator.quickapp.RpkManager.QuickAppPackage) {
+private fun I18nBody(pkg: com.vela.simulator.quickapp.RpkManager.QuickAppPackage) {
     var locale by remember(pkg.filePath) { mutableStateOf(pkg.i18nLocales.first()) }
     val strings = remember(pkg.filePath, locale) {
         com.vela.simulator.quickapp.RpkManager.loadI18n(pkg, locale)
     }
-    InfoCard(title = "i18n 字符串表") {
+    Column {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(pkg.i18nLocales) { l ->
                 AssistChip(
@@ -582,6 +611,35 @@ private fun I18nCard(pkg: com.vela.simulator.quickapp.RpkManager.QuickAppPackage
 }
 
 /* ===================== 通用卡片 ===================== */
+
+/** v2.2.1: 可折叠信息卡（默认收起），点击标题展开/收起，缩短长页面 */
+@Composable
+fun ExpandableCard(
+    title: String,
+    initiallyExpanded: Boolean = false,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    var expanded by remember(title) { mutableStateOf(initiallyExpanded) }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = VelaSurface),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = VelaOrange, modifier = Modifier.weight(1f))
+                Text(if (expanded) "收起" else "展开", style = MaterialTheme.typography.labelSmall, color = VelaTextDim)
+            }
+            if (expanded) {
+                Spacer(Modifier.height(8.dp))
+                content()
+            }
+        }
+    }
+}
 
 @Composable
 fun InfoCard(title: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {

@@ -14,6 +14,7 @@ import com.vela.simulator.quickapp.RpkManager
 import com.vela.simulator.util.FileLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -184,12 +185,64 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _sessionState.value = sessions.toMap()
         viewModelScope.launch(Dispatchers.IO) {
             // 任何启动异常都必须留在会话内，绝不能带崩整个应用
-            runCatching { s.start() }
+            runCatching {
+                // v2.2.1: 启动前确保内置镜像与清单一致。data.img 在 v2.2.1 重建了
+                // FAT 一致性（旧镜像 /VAPPS 目录簇未在 FAT 分配，guest 写数据盘时
+                // 会破坏 FAT 表 → rpk 解包 EIO → 黑屏）。asset:// 重部署零网络，
+                // 64MB 拷贝毫秒级；SHA 一致时无开销（仅一次 32~64MB 哈希，~百毫秒）。
+                val otherRunning = sessions.values.any { o ->
+                    o !== s && (o.state.value == QemuSession.State.RUNNING ||
+                        o.state.value == QemuSession.State.BOOTING)
+                }
+                if (!otherRunning) {
+                    awaitQemuExit()
+                    val ok = images.ensureAssetsCurrent(t.imageId)
+                    if (!ok) {
+                        s.failWith("内置镜像部署校验失败，请到设备详情页重新部署", null)
+                        return@launch
+                    }
+                } else {
+                    FileLogger.w("session", "其他虚拟机运行中，跳过镜像一致性校验（不重部署）")
+                }
+                s.start()
+            }
                 .onFailure {
                     FileLogger.e("session", "会话启动异常", it)
                     s.failWith(it.message ?: "未知错误", it)
                 }
         }
+    }
+
+    /**
+     * v2.2.1: 等待全部 QEMU 进程退出（写数据盘 / 重部署镜像前调用）。
+     * 超时后按孤儿处理强杀。仅在会话表已无运行态会话时调用。
+     */
+    private suspend fun awaitQemuExit(timeoutMs: Long = 8_000): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (runtime.findQemuPids().isEmpty()) return true
+            delay(250)
+        }
+        runtime.killOrphanQemu()
+        delay(300)
+        return runtime.findQemuPids().isEmpty()
+    }
+
+    /**
+     * v2.2.1: 数据盘互斥写前置 —— 停掉全部运行中会话并等待 QEMU 退出（含孤儿清理）。
+     * 返回 null = 就绪；非 null = 失败原因。
+     */
+    private suspend fun prepareDiskExclusive(): String? {
+        val running = sessions.values.filter {
+            it.state.value == QemuSession.State.RUNNING || it.state.value == QemuSession.State.BOOTING
+        }
+        running.forEach { it.stop() }
+        if (running.isNotEmpty()) {
+            FileLogger.i("rpk", "写数据盘前自动停止 ${running.size} 台运行中的虚拟机")
+        }
+        val ok = awaitQemuExit()
+        if (!ok) return "无法停止运行中的 QEMU 进程，请稍后重试"
+        return null
     }
 
     fun stopSession(templateId: String) {
@@ -289,6 +342,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _vmInstallState = MutableStateFlow(VmInstallUiState())
     val vmInstallState: StateFlow<VmInstallUiState> = _vmInstallState
 
+    /** v2.2.1: 用户确认后清除错误横幅 */
+    fun clearVmInstallError() {
+        val cur = _vmInstallState.value
+        if (!cur.busy) _vmInstallState.value = cur.copy(error = null)
+    }
+
     private val _vmPackages = MutableStateFlow<List<RpkInstaller.VmPackage>>(emptyList())
     val vmPackages: StateFlow<List<RpkInstaller.VmPackage>> = _vmPackages
 
@@ -310,11 +369,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 安装已导入的 rpk 到数据盘；完成后自动刷新列表 */
+    /** 安装已导入的 rpk 到数据盘；完成后自动刷新列表。写盘前自动停止运行中的虚拟机 */
     fun installRpkToVm(pkg: RpkManager.QuickAppPackage) {
         if (_vmInstallState.value.busy) return
         _vmInstallState.value = VmInstallUiState(busy = true, stage = "准备…")
         viewModelScope.launch(Dispatchers.IO) {
+            prepareDiskExclusive()?.let {
+                _vmInstallState.value = VmInstallUiState(error = it)
+                return@launch
+            }
             val progress = object : QemuRuntime.Progress {
                 override fun onStage(stage: String) {
                     _vmInstallState.value = _vmInstallState.value.copy(stage = stage)
@@ -339,6 +402,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_vmDiskBusy.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _vmDiskBusy.value = true
+            prepareDiskExclusive()?.let {
+                _vmInstallState.value = VmInstallUiState(error = it)
+                _vmDiskBusy.value = false
+                refreshVmPackages()
+                return@launch
+            }
             RpkInstaller.remove(runtime, vmDataDisk, packageId)
                 .onFailure { FileLogger.e("rpk", "rpk 卸载失败: $packageId", it) }
             _vmDiskBusy.value = false
@@ -348,21 +417,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * v2.2 工坊主入口：安装 rpk 到数据盘 → 指定模板启动该包 → 回调导航到运行页。
-     * 已装过的包直接启动（跳过写入）；写盘要求当前没有运行中的虚拟机。
+     * 已装过的包直接启动（跳过写入）；写盘前自动停止全部运行中虚拟机（v2.2.1 互斥保护）。
      */
     fun installRpkAndLaunch(t: DeviceTemplate, pkg: RpkManager.QuickAppPackage, onLaunched: () -> Unit) {
         if (_vmInstallState.value.busy) return
         viewModelScope.launch(Dispatchers.IO) {
             val installed = _vmPackages.value.any { it.packageId == pkg.packageId }
-            val progress = object : QemuRuntime.Progress {
-                override fun onStage(stage: String) {
-                    _vmInstallState.value = _vmInstallState.value.copy(busy = true, stage = stage, error = null)
-                }
-                override fun onFileProgress(name: String, downloaded: Long, total: Long) {}
-                override fun onLog(line: String) { FileLogger.i("rpk", line) }
-            }
             if (!installed) {
                 _vmInstallState.value = VmInstallUiState(busy = true, stage = "准备…")
+                prepareDiskExclusive()?.let {
+                    _vmInstallState.value = VmInstallUiState(error = it)
+                    return@launch
+                }
+                val progress = object : QemuRuntime.Progress {
+                    override fun onStage(stage: String) {
+                        _vmInstallState.value = _vmInstallState.value.copy(busy = true, stage = stage, error = null)
+                    }
+                    override fun onFileProgress(name: String, downloaded: Long, total: Long) {}
+                    override fun onLog(line: String) { FileLogger.i("rpk", line) }
+                }
                 val r = RpkInstaller.install(runtime, vmDataDisk, File(pkg.filePath), progress)
                 if (r.isFailure) {
                     _vmInstallState.value = VmInstallUiState(error = r.exceptionOrNull()?.message ?: "安装失败")

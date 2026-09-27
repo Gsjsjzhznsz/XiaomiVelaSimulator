@@ -91,8 +91,35 @@ class QemuSession(
             logLines.value = (logLines.value + complete).takeLast(800)
             _consoleLines.value = (_consoleLines.value + complete).takeLast(400)
             complete.forEach { FileLogger.sessionLine(it) }
+            complete.forEach { detectGuestFailure(it) }
         }
         maybeAutoCommand()
+    }
+
+    /**
+     * v2.2.1: guest 侧快应用故障诊断。串口出现 vapp/vrpk 错误时给用户明确指引，
+     * 而不是无限黑屏到底（真机教训：rpk 解包 EIO → vapp 退出 → 用户只见黑屏）。
+     * 注："exec failed: 2" 是该固件 NSH 每条命令必打的噪音（builtin 分发前的
+     * 外部 spawn 回退），命令实际都会执行，不在此列。
+     */
+    private fun detectGuestFailure(line: String) {
+        val (hint, phase) = when {
+            line.contains("[vapp] rpk unpack failed") ->
+                "快应用解包失败：数据盘镜像可能已损坏。请到工坊卸载该包重装，或到设备详情页重新部署内置镜像（会重置数据盘）" to
+                    "快应用解包失败（数据盘镜像异常）"
+            line.contains("[vapp] package not found") ->
+                "虚拟机内找不到该快应用包：可能数据盘刚被重部署（包已重置）。请到工坊重新安装后再启动" to
+                    "数据盘中未找到该快应用包"
+            line.contains("entry page missing") ->
+                "快应用入口页面缺失：rpk 包结构不完整或 router.entry 与实际页面不符" to
+                    "快应用入口页面缺失"
+            line.contains("[vrpk] slurp failed") ->
+                "快应用包读取失败（数据盘 I/O 错误）：数据盘镜像可能已损坏，请重新部署内置镜像" to
+                    "快应用包读取失败（数据盘异常）"
+            else -> return
+        }
+        appendLog("[vela] $hint")
+        if (!_scanoutReady.value) _bootPhase.value = phase
     }
 
     /**

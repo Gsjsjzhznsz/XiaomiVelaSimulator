@@ -43,13 +43,15 @@ class StartupTest {
         // 首页标题与运行时卡片
         rule.onNodeWithText("Xiaomi VELA 模拟器").assertExists()
         rule.onNodeWithText("QEMU 运行时", substring = true).assertExists()
-        // 模板加载完成（15 款内置设备）：refreshTemplates 在 IO 线程异步执行，
+        // 模板加载完成（16 款内置设备）：refreshTemplates 在 IO 线程异步执行，
         // waitForIdle 不保证其完成，显式等待至超时
+        // （v2.2.1 修正：v2.1.0 加 vapp-demo 后总数为 16，此处 15 的陈旧断言
+        //   导致 waitUntil 永不满足 → ComposeTimeoutException）
         rule.waitUntil(timeoutMillis = 10_000) {
-            rule.onAllNodesWithText("设备模板（15）", substring = true)
+            rule.onAllNodesWithText("设备模板（16）", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        rule.onNodeWithText("设备模板（15）").assertExists()
+        rule.onNodeWithText("设备模板（16）").assertExists()
         // 组合树非空
         val tree = rule.onRoot().printToString(maxDepth = 4)
         org.junit.Assert.assertTrue("组合树为空（黑屏回归）", tree.contains("QEMU"))

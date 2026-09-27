@@ -2,6 +2,7 @@ package com.vela.simulator.engine
 
 import android.content.Context
 import com.vela.simulator.util.DebExtractor
+import com.vela.simulator.util.FileLogger
 import com.vela.simulator.util.HttpDownloader
 import com.vela.simulator.util.NetUa
 import kotlinx.coroutines.Dispatchers
@@ -400,6 +401,44 @@ class QemuRuntime(private val context: Context) {
             while (true) { val n = ins.read(buf); if (n < 0) break; md.update(buf, 0, n) }
         }
         return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    // ---- v2.2.1: QEMU 孤儿进程管理（数据盘写保护） ----
+    //
+    // App 崩溃（如曾经的空指针）时 QEMU 子进程可能存活成为孤儿并持续持有
+    // data.img；此时 mtools 写盘 = 写竞争 = FAT 损坏（用户 watch5 黑屏诱因之一）。
+    // 扫描 /proc 找出真实存活的 qemu-system 进程；写盘前先杀孤儿（会话表之外的）。
+
+    /** 扫描 /proc，返回当前 uid 下所有 qemu-system 进程 pid */
+    fun findQemuPids(): List<Int> {
+        val pids = mutableListOf<Int>()
+        val procDir = File("/proc")
+        val dirs = procDir.listFiles { f -> f.isDirectory && f.name.toIntOrNull() != null } ?: return pids
+        for (d in dirs) {
+            runCatching {
+                val cmdline = File(d, "cmdline").readBytes().decodeToString()
+                if (cmdline.contains("qemu-system")) {
+                    d.name.toIntOrNull()?.let(pids::add)
+                }
+            }
+        }
+        return pids
+    }
+
+    /**
+     * 数据盘互斥写保护：确保写盘时没有 QEMU 进程持有 data.img。
+     * @param liveSessions 当前会话表中存活的 qemu 进程 pid（由调用方收集，不误杀）
+     * @return 杀掉的孤儿 pid 列表（空 = 无孤儿）
+     */
+    fun killOrphanQemu(liveSessionPids: Set<Int> = emptySet()): List<Int> {
+        val orphans = findQemuPids().filter { it !in liveSessionPids }
+        for (pid in orphans) {
+            runCatching {
+                android.os.Process.killProcess(pid)
+                FileLogger.w("qemu", "已清理孤儿 QEMU 进程 pid=$pid")
+            }.getOrNull()
+        }
+        return orphans
     }
 
     /**

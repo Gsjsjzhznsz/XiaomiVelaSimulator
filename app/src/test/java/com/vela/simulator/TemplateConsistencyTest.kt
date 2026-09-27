@@ -97,6 +97,56 @@ class TemplateConsistencyTest {
     }
 
     @Test
+    fun `all builtin templates mount data disk before vapp`() {
+        // v2.2.1 实验定论：固件【不会】automount /data（不发 mount 时 vapp 报
+        // package not found，隔 20s 重试依旧）；而 mount 实际会成功执行 ——
+        // 串口里的 "nxposix_spawn_exec: ERROR: exec failed: 2" 是每条命令必打
+        // 的噪音（builtin 分发前的外部 spawn 回退），mount/vapp/cat/ls 都打，
+        // 不能误判为 mount 失败。自动命令中的 mount 是必需项，加锁防误删。
+        val noMount = loadTemplates().filter {
+            !it.qemu.autoCommand.contains("mount -t vfat /dev/virtblk0 /data")
+        }
+        assertTrue(
+            "以下模板自动命令缺少 mount 数据盘（guest 将看不到 /data，包全部 not found）: " +
+                noMount.joinToString { it.id },
+            noMount.isEmpty(),
+        )
+    }
+
+    @Test
+    fun `image manifest sha256 matches bundled asset files`() {
+        // v2.2.1 教训：data.img 出厂镜像存在 FAT 不一致缺陷（/VAPPS 目录簇未在
+        // FAT 分配），已重建。若清单 sha 与实际 assets 文件不同步，用户升级后
+        // 旧损坏镜像永远不会被重新部署（copyFromAssets 仅校验清单 sha）。
+        val manifest = File("src/main/assets/image_manifest.json").readText()
+        val imagesDir = File("src/main/assets/images")
+        // 逐个 {...} 对象解析（字段顺序不敏感：清单里 sha256 在 out 之前）
+        val objRe = Regex("\\{[^{}]*\\}")
+        val fieldRe = Regex("\"(out|sha256)\"\\s*:\\s*\"([^\"]+)\"")
+        val entries = objRe.findAll(manifest)
+            .map { m -> fieldRe.findAll(m.value).associate { it.groupValues[1] to it.groupValues[2] } }
+            .filter { it.containsKey("out") && it.containsKey("sha256") }
+            .toList()
+        assertTrue("清单中未解析到任何 asset 文件条目", entries.isNotEmpty())
+        for (e in entries) {
+            val out = e.getValue("out")
+            val expected = e.getValue("sha256")
+            val f = File(imagesDir, out)
+            assertTrue("清单声明的镜像不存在: $out", f.isFile)
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            f.inputStream().use { ins ->
+                val buf = ByteArray(64 * 1024)
+                while (true) { val n = ins.read(buf); if (n < 0) break; md.update(buf, 0, n) }
+            }
+            val actual = md.digest().joinToString("") { "%02x".format(it) }
+            assertTrue(
+                "镜像 $out 的清单 sha256 与实际文件不符（清单=$expected 实际=$actual）",
+                actual.equals(expected, ignoreCase = true),
+            )
+        }
+    }
+
+    @Test
     fun `band resolutions survive width alignment`() {
         // 宽度对齐（仅 ELF 引导模板适用，raw 引导已跳过对齐）；对齐后不得超出合理范围
         // （否则 VncDisplayView 变形/触摸归一化失真）

@@ -35,8 +35,9 @@ object RpkInstaller {
     private fun bin(runtime: QemuRuntime, name: String) = File(runtime.prefixUsr, "bin/$name")
 
     fun toolsReady(runtime: QemuRuntime): Boolean =
-        bin(runtime, "mcopy").let { it.exists() && it.canExecute() } &&
-            bin(runtime, "mdel").let { it.exists() && it.canExecute() }
+        listOf("mcopy", "mdel", "mdeltree").all { name ->
+            bin(runtime, name).let { it.exists() && it.canExecute() }
+        }
 
     /**
      * 确保 mtools 可用：不存在则从 Termux 软件源按需安装（竞速选源 + 依赖闭包）。
@@ -46,7 +47,7 @@ object RpkInstaller {
             runCatching {
                 if (!toolsReady(runtime)) {
                     runtime.ensurePackage("mtools", progress)
-                    listOf("mcopy", "mdel", "mtype", "mdir").forEach {
+                    listOf("mcopy", "mdel", "mtype", "mdir", "mdeltree").forEach {
                         bin(runtime, it).setExecutable(true, false)
                     }
                 }
@@ -163,7 +164,9 @@ object RpkInstaller {
         }
     }
 
-    /** 从数据盘移除包（内置 com.vela.demo 允许移除；重新部署内置镜像即可恢复） */
+    /** 从数据盘移除包（内置 com.vela.demo 允许移除；重新部署内置镜像即可恢复）。
+     *  v2.2.1: 同时清理 guest 侧解包树 ::/vapps/<pkg>（vapp 路径#1 优先用解包树，
+     *  只删 .rpk 的话包在「卸载」后仍能启动） */
     suspend fun remove(
         runtime: QemuRuntime,
         dataDisk: File,
@@ -180,6 +183,15 @@ object RpkInstaller {
                 ),
             )
             check(code == 0) { "mdel 删除失败: ${out.trim().take(300)}" }
+            // 清理解包树（不存在时忽略错误）
+            exec(
+                runtime,
+                listOf(
+                    bin(runtime, "mdeltree").absolutePath, "-i", dataDisk.absolutePath,
+                    "::/vapps/$packageId",
+                ),
+            )
+            Unit
         }
     }
 }

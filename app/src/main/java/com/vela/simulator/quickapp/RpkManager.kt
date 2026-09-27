@@ -52,8 +52,12 @@ object RpkManager {
     fun import(ctx: Context, uri: android.net.Uri, outDirName: String = "quickapps"): Result<QuickAppPackage> = runCatching {
         val outDir = File(ctx.filesDir, outDirName).apply { mkdirs() }
         val tmp = File(outDir, "import_${System.currentTimeMillis()}.rpk")
-        ctx.contentResolver.openInputStream(uri)!!.use { ins ->
-            tmp.outputStream().use { ins.copyTo(it) }
+        // v2.2.1: openInputStream 可能返回 null（部分文件管理器/URI 权限异常）——
+        // 原实现 `!!` 直接 NPE 崩溃，改为友好错误
+        val ins = ctx.contentResolver.openInputStream(uri)
+            ?: error("无法读取所选文件（文件可能已被移动或无访问权限），请重新选择")
+        ins.use { src ->
+            tmp.outputStream().use { src.copyTo(it) }
         }
         check(tmp.length() > 0) { "文件为空" }
         parse(tmp).getOrElse { e ->
