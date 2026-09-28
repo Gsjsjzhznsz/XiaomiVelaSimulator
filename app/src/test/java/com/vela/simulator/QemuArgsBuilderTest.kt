@@ -177,5 +177,12 @@ class QemuArgsBuilderTest {
         assertTrue(plan.command.contains("-device"))
         assertTrue(plan.command.none { it == "-kernel" })
         assertTrue(plan.command.any { it.startsWith("loader,file=") })
+        // v2.2.6：数据盘必须 snapshot=on —— guest 全部写落临时 overlay，固件 FAT
+        // 「半更新」写缺陷对真盘物理不可达（真盘 data.img 只经 App 侧 mtools 变更）
+        val drive = plan.command[plan.command.indexOf("-drive") + 1]
+        assertTrue(
+            "数据盘必须 snapshot=on（防固件写缺陷损坏真盘 data.img）",
+            drive.startsWith("file=") && drive.endsWith(",snapshot=on"),
+        )
     }
 }

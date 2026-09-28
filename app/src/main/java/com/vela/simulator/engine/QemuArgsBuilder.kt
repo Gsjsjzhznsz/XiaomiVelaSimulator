@@ -139,7 +139,17 @@ object QemuArgsBuilder {
         if (q.dataImg.isNotBlank()) {
             val disk = File(imagesDir, q.dataImg)
             check(disk.exists()) { "数据盘镜像不存在: ${q.dataImg}，请先在设备详情页下载" }
-            args += listOf("-drive", "file=${disk.absolutePath},if=none,format=raw,id=hd0")
+            // v2.2.6 根治（真机日志+桌面 P1/P2/P5/P6 四轮探针复现实锤）：固件 FAT 写路径存在
+            // 「半更新」缺陷——guest 内一次解包写盘即产生 FAT[6]=0xfff0013（新低 16bit+旧高位
+            // 残留）损坏 → mtools "Cluster # at 6 too big" → list/install 全链路失败 →
+            // package_not_found 自愈循环（桌面同签名复现：无 snapshot 引导后 FAT[12]:
+            // 0xd→0xfff000d，仅引导未解包即损坏）。snapshot=on 使 guest 全部写落 TMPDIR 临时
+            // overlay（execEnvironment 已设 TMPDIR），真盘 data.img 只经 App 侧 mtools 变更，
+            // 固件写缺陷物理不可达；路径#2 降级解包的写同样落 overlay（会话内可见、结束丢弃；
+            // 大包尾块读缺陷为固件已知遗留，v2.2.5 已记录，与 snapshot 无关）。e2e 实证
+            // （scripts/repro_v226/ 串口日志+FAT 探针）：P5(snapshot=on+完整安装)≡P2 路径#1
+            // 零写命中+JS 正常执行；P1 实锤引导即写坏真盘；P2/P5/P6 真盘 SHA 前后不变。
+            args += listOf("-drive", "file=${disk.absolutePath},if=none,format=raw,id=hd0,snapshot=on")
             args += listOf("-device", "virtio-blk-device,drive=hd0")
         }
 
