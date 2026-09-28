@@ -21,7 +21,8 @@
           "url": "asset://images/data.img",
           "sha256": "b41a9ed482cce30737af26a15261ec2a6513490e83d0d1783c1dd721d4c3aafa",
           "size": 67108864,
-          "out": "data.img"
+          "out": "data.img",
+          "stateful": true
         }
       ]
     }

@@ -498,7 +498,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _vmInstallState.value = VmInstallUiState(error = "数据盘已损坏且无法停止运行中的虚拟机：$it")
                 return false
             }
-            val ok = images.ensureAssetsCurrent(dataImageEntryId())
+            // v2.2.7: DiskDoctor 修复必须强制重部署干净镜像（ensureAssetsCurrent
+            // 默认按「部署标记」判定，用户数据盘原样保留 —— 只有显式 force 才重拷；
+            // 重拷后下方从 files/quickapps 备份恢复用户包）
+            val ok = images.ensureAssetsCurrent(dataImageEntryId(), forceRedeploy = true)
             if (!ok || !vmDataDisk.isFile) {
                 _vmInstallState.value = VmInstallUiState(
                     error = "数据盘修复失败：内置镜像重部署异常，请到设备详情页手动「重新部署」",

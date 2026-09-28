@@ -27,6 +27,9 @@ import java.util.concurrent.TimeUnit
  * 国内加速（v0.2.3）：GitHub 直连在境内网络经常超时/失败，下载时自动级联
  * 多个公共 GitHub 反代（gh-proxy 系列），直连成功则直接用，失败逐个换代理重试。
  */
+/** v2.2.7: 状态盘部署决策（顶层枚举，随纯函数一起被单测锁定） */
+enum class DeployDecision { KEEP, DEPLOY, ADOPT_WRITE_MARKER }
+
 class ImageManager(private val context: Context) {
 
     companion object {
@@ -56,12 +59,33 @@ class ImageManager(private val context: Context) {
                     && head[2] == 'L'.code.toByte() && head[3] == 'F'.code.toByte()
             }
         }.getOrDefault(false)
+
+        /**
+         * v2.2.7: 状态盘部署决策（纯函数，单测锁定）。
+         * 数据盘是用户可写盘 —— 只要部署标记与清单一致，内容 SHA 无论怎么变
+         * （装包/卸包/自愈写盘）都必须 KEEP，绝不重拷。
+         */
+        fun isStatefulImage(out: String, statefulFlag: Boolean): Boolean =
+            statefulFlag || out.equals("data.img", ignoreCase = true)
+
+        fun decideStatefulDeploy(
+            fileExists: Boolean,
+            markerContent: String?,
+            manifestSha256: String,
+            forceRedeploy: Boolean,
+        ): DeployDecision = when {
+            !fileExists || forceRedeploy -> DeployDecision.DEPLOY
+            markerContent == null -> DeployDecision.ADOPT_WRITE_MARKER
+            manifestSha256.isNotEmpty() && !markerContent.equals(manifestSha256, ignoreCase = true) ->
+                DeployDecision.DEPLOY
+            else -> DeployDecision.KEEP
+        }
     }
 
     val imagesDir: File get() = File(context.filesDir, "images").apply { mkdirs() }
 
     @Serializable
-    data class ImageFile(val url: String, val sha256: String = "", val size: Long = 0, val out: String)
+    data class ImageFile(val url: String, val sha256: String = "", val size: Long = 0, val out: String, val stateful: Boolean = false)
 
     @Serializable
     data class ImageEntry(
@@ -173,32 +197,91 @@ class ImageManager(private val context: Context) {
         progress?.onLog("内置镜像部署完成: $label")
     }
 
-    /** v2.2.1: 确保本地镜像与清单一致（asset:// 项 SHA 不符时自动重部署，零网络）。
-     *  返回 true = 本地镜像与清单一致（或无法校验但文件存在）。 */
-    suspend fun ensureAssetsCurrent(entryId: String): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * v2.2.1: 确保本地镜像与清单一致（asset:// 项 SHA 不符时自动重部署，零网络）。
+     * 返回 true = 本地镜像与清单一致（或无法校验但文件存在）。
+     *
+     * v2.2.7 真机实锤重写（用户日志 commit 97bbabf，09-28 22:17 会话）：
+     * 旧实现对【所有】asset 文件按「部署文件内容 SHA」判定新旧 —— 而数据盘是
+     * 用户可写状态盘，工坊每装一个 rpk 内容必变 → SHA 必然 ≠ 出厂清单 →
+     * 【每次启动会话都会把 data.img 删掉重拷】，用户包被静默抹光 → vapp 恒报
+     * package not found → 自愈恢复 → 重启又被抹 → 循环到自愈上限（日志实锤：
+     * 22:17:45.364 列表 2 个包 → startSession → 45.510 只剩 demo）。
+     *
+     * 修复语义：
+     *  - 只读内核（nuttx.bin 等）：维持内容 SHA 校验（损坏可发现，重拷无副作用）；
+     *  - 状态盘（stateful=true / out=="data.img"）：改用「部署标记」
+     *    <out>.deployed（内容 = 清单 sha256，即 APK 内置资产的出厂身份）：
+     *      · 文件缺失            → 部署 + 写标记；
+     *      · 标记缺失、文件在    → 采纳现状（老用户升级首启，绝不抹盘）+ 写标记；
+     *      · 标记 ≠ 清单 sha     → APK 换了新资产 → 一次性重部署 + 写标记；
+     *      · 其余（含内容 SHA 任何变化）→ 保留现状（用户包不受影响）。
+     *  - forceRedeploy=true（仅 DiskDoctor 修复路径用）：删文件+标记强制重拷，
+     *    部署后由调用方负责从 files/quickapps 备份恢复用户包。
+     */
+    suspend fun ensureAssetsCurrent(entryId: String, forceRedeploy: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         val entry = loadManifest().images.firstOrNull { it.id == entryId }
             ?: return@withContext true
         var allOk = true
         for (f in entry.files) {
             if (!f.url.startsWith("asset://")) continue
             val dest = kernelFile(f.out)
-            if (!dest.isFile || dest.length() <= 0) {
-                copyFromAssets(f.url.removePrefix("asset://"), dest, f.out, f.sha256)
-                allOk = allOk && dest.isFile
-                continue
+            val marker = deployedMarker(f.out)
+            if (forceRedeploy) {
+                runCatching { dest.delete(); marker.delete() }
             }
-            if (f.sha256.isNotEmpty()) {
-                val actual = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
-                if (!actual.equals(f.sha256, ignoreCase = true)) {
-                    progress?.onStage("数据镜像版本更新，重新部署 ${f.out}")
-                    runCatching { dest.delete() }
+            val missing = !dest.isFile || dest.length() <= 0
+            if (isStatefulImage(f.out, f.stateful)) {
+                val manifestSha = f.sha256
+                val markerContent = if (marker.isFile) runCatching { marker.readText().trim() }.getOrNull() else null
+                when (decideStatefulDeploy(!missing, markerContent, manifestSha, forceRedeploy)) {
+                    DeployDecision.DEPLOY -> {
+                        if (dest.isFile) {
+                            // APK 升级更换了出厂数据盘资产 → 一次性重部署
+                            progress?.onStage("数据镜像版本更新，重新部署 ${f.out}")
+                            runCatching { dest.delete() }
+                        } else {
+                            progress?.onStage("部署内置镜像 ${f.out}")
+                        }
+                        copyFromAssets(f.url.removePrefix("asset://"), dest, f.out)
+                        if (manifestSha.isNotEmpty() && !verifyKernel(f.out, manifestSha)) allOk = false
+                        writeDeployedMarker(f.out, manifestSha)
+                    }
+                    DeployDecision.ADOPT_WRITE_MARKER -> {
+                        // 老版本升级首启：盘上有用户数据且无标记 —— 采纳现状，绝不重拷
+                        progress?.onLog("数据盘部署标记缺失，采纳现有数据盘（不重置）: ${f.out}")
+                        writeDeployedMarker(f.out, manifestSha)
+                    }
+                    DeployDecision.KEEP -> { /* 标记匹配：用户数据盘原样保留（装包导致的 SHA 变化无关紧要） */ }
+                }
+                if (!dest.isFile) allOk = false
+            } else {
+                if (missing) {
                     copyFromAssets(f.url.removePrefix("asset://"), dest, f.out, f.sha256)
-                    val after = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
-                    if (!after.equals(f.sha256, ignoreCase = true)) allOk = false
+                    allOk = allOk && dest.isFile
+                    continue
+                }
+                if (f.sha256.isNotEmpty()) {
+                    val actual = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
+                    if (!actual.equals(f.sha256, ignoreCase = true)) {
+                        progress?.onStage("数据镜像版本更新，重新部署 ${f.out}")
+                        runCatching { dest.delete() }
+                        copyFromAssets(f.url.removePrefix("asset://"), dest, f.out, f.sha256)
+                        val after = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
+                        if (!after.equals(f.sha256, ignoreCase = true)) allOk = false
+                    }
                 }
             }
         }
         allOk
+    }
+
+    /** v2.2.7: 状态盘部署标记（内容 = 清单 sha256 = APK 内置资产的出厂身份） */
+    private fun deployedMarker(out: String): File = File(imagesDir, "$out.deployed")
+
+    private fun writeDeployedMarker(out: String, manifestSha256: String) {
+        if (manifestSha256.isEmpty()) return
+        runCatching { deployedMarker(out).writeText(manifestSha256) }
     }
 
     /**
