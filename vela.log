@@ -153,3 +153,25 @@
 09-28 22:18:00.382 I/session: 停止会话
 09-28 22:18:01.429 I/session: QEMU 退出 code=0
 09-28 22:18:01.482 W/rpk: DiskDoctor: 数据盘 FAT 损坏，开始自动修复
+09-28 23:42:21.583 I/app: ===== VELA Simulator 日志会话开始 20260928-234221 =====
+09-28 23:42:21.591 I/app: device=Xiaomi 22041216C android=15 sdk=35 abi=arm64-v8a
+09-28 23:42:21.592 I/app: CrashGuard 已安装
+09-28 23:42:21.632 I/app: VelaApp.onCreate
+09-28 23:42:21.959 I/app: MainActivity.onCreate
+09-28 23:42:24.914 I/templates: 模板加载完成: 16 个
+09-28 23:42:28.381 I/rpk: 数据盘包列表: com.vela.demo
+09-28 23:42:49.344 I/rpk: LFN 注入完成: 43 条
+09-28 23:42:49.435 I/session: 会话日志: session-20260928-234249.log
+09-28 23:42:49.435 I/session: 开始启动会话 template=smart-band-10-nfc machine=virt
+09-28 23:42:49.444 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=212,yres=520 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0,snapshot=on -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:33235,server -vnc 127.0.0.1:37311 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-28 23:42:49.448 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-28 23:42:50.709 I/vnc: desktop-resize 212x520 (smart-band-10-nfc)
+09-28 23:43:20.220 I/session: 停止会话
+09-28 23:43:21.457 I/session: QEMU 退出 code=0
+09-28 23:43:21.964 I/rpk: 数据盘包列表: com.vela.demo, io.github.gsjsjzhznsz.bandqq
+09-28 23:43:23.417 I/session: 会话日志: session-20260928-234323.log
+09-28 23:43:23.418 I/session: 开始启动会话 template=redmi-watch-5-esim machine=virt
+09-28 23:43:23.420 I/session: qemu-cmd: /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0,snapshot=on -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:33927,server -vnc 127.0.0.1:34011 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+09-28 23:43:24.664 I/vnc: desktop-resize 432x514 (redmi-watch-5-esim)
+09-28 23:43:42.376 I/session: 停止会话
+09-28 23:43:43.587 I/session: QEMU 退出 code=0
