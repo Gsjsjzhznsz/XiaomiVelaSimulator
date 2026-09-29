@@ -1,7 +1,21 @@
 package com.vela.simulator.quickapp
 
 /**
- * v2.2.5: FAT32 镜像 LFN 长名链注入器（宿主侧，无需 mtools/root）。
+ * v2.2.8: FAT32 镜像 LFN 长名链注入器（宿主侧，无需 mtools/root）+ 目录跨簇增长。
+ *
+ * v2.2.8 背景（真机日志 + 桌面决定性实验实锤，scripts/repro_disp/）：
+ * 固件 NuttX FAT 驱动对【多扇区簇（spc>1）】镜像的跨簇文件读取存在缺陷——
+ * 单簇文件（≤4KB）读正常、跨簇文件首模块加载即 EIO（read_file 短读 →
+ * "could not load module"），与内容/目录/链路无关（镜像内字节级取证完好）。
+ * v2.2.2 时代镜像为 mformat 默认 spc=1（512B 簇），跨簇读取正常（145KB 实证）；
+ * v2.2.4 为绕开本注入器「目录重排溢出」改用 -c 8（4KB 簇）→ 引入本回归。
+ * 实体机（真实 Vela 驱动）无此缺陷，故同一 rpk 实体机正常、模拟器无显示。
+ * demo 包全文件 <4KB（单簇）从未踩雷，掩盖至今。
+ *
+ * 修复：数据盘回归 spc=1（build_clean_data.sh -c 1），本注入器新增
+ * 【目录跨簇增长】：重排后目录体超出当前链容量时，从 FAT 分配空闲簇
+ * 接链（双 FAT 镜像同步写、末簇置 EOC），彻底消除「目录重排溢出」。
+ * （512B 簇目录仅容 16 条目，真实包单目录可达 26+ 条目，必须可增长。）
  *
  * 背景（桌面 e2e + guest 内逐级探测实证，配方见 scripts/repro_v224/）：
  * 1. 固件 NuttX FAT 对 8.3 短名条目做「原始字节大小写敏感」比较（/data/RESOURCE 可查，
@@ -15,6 +29,7 @@ package com.vela.simulator.quickapp
  * 3. 固件 FAT 写路径存在「半更新」缺陷（新分配簇链前两个表项高 16 位残留 EOC 的
  *    0xffff），guest 解包写盘会触发 → 数据盘亚损坏（mtools 宽容可读、NuttX 拒绝）。
  *    预解包树 + LFN 注入让 vapp 命中路径#1 零写启动，写盘路径不可达。
+ *    v2.2.6 起 snapshot=on 使固件写缺陷物理不可达，本注入仍保持零写盘语义。
  *
  * v2.2.4 版注入器三缺陷（本轮字节级取证实锤，全部修复）：
  * ① LFN 块序颠倒——seq N|0x40（盘上首条）必须持名字【结尾】13 字符、seq 1（紧贴
@@ -94,17 +109,73 @@ object FatLfnInjector {
             return out.toByteArray()
         }
 
-        fun writeChain(start: Int, data: ByteArray) {
+        /** v2.2.8: 目录簇链清单（与 readChain 同语义，返回簇号序列） */
+        fun chainList(start: Int): List<Int> {
+            val out = ArrayList<Int>()
             var c = start
-            var pos = 0
             val seen = HashSet<Int>()
             while (c in 2 until maxclus + 2 && seen.add(c)) {
-                val n = minOf(b.spc * SEC, data.size - pos)
-                if (n <= 0) break
-                System.arraycopy(data, pos, img, clusOff(c), n)
-                pos += n
+                out.add(c)
                 c = fatEntry(c)
                 if (c < 0 || c >= 0x0FFFFFF8) break
+            }
+            return out
+        }
+
+        /** v2.2.8: 写 FAT 表项到全部 FAT 副本（FAT32 高 4 位保留位清零，与 mcopy 行为一致） */
+        fun setFat(n: Int, v: Int) {
+            for (k in 0 until b.nfats) {
+                val off = (b.rsvd + k * b.fatsz) * SEC + n * 4
+                img[off] = (v and 0xFF).toByte()
+                img[off + 1] = ((v shr 8) and 0xFF).toByte()
+                img[off + 2] = ((v shr 16) and 0xFF).toByte()
+                img[off + 3] = (v shr 24).toByte()
+            }
+        }
+
+        /** v2.2.8: 从 FAT#0 扫描空闲簇（entry==0） */
+        fun allocFree(): Int {
+            for (c in 2 until maxclus + 2) {
+                if (fatEntry(c) == 0) return c
+            }
+            throw IllegalStateException("镜像无空闲簇，无法增长目录")
+        }
+
+        /**
+         * v2.2.8: 写目录链；容量不足时从 FAT 分配新簇接链（双 FAT 同步、末簇 EOC）。
+         * data 末尾不足一簇的部分补 0（目录空闲区语义）。
+         */
+        fun writeChain(start: Int, data: ByteArray) {
+            var chain = chainList(start)
+            var cap = chain.size * b.spc * SEC
+            if (data.size > cap) {
+                var need = (data.size - cap + b.spc * SEC - 1) / (b.spc * SEC)
+                val added = ArrayList<Int>(need)
+                while (need > 0) {
+                    added.add(allocFree())
+                    need--
+                }
+                chain = chain + added
+                // 接链：原末簇 → 新簇链 → 末簇 EOC（双 FAT 同步）
+                for (i in 0 until chain.size - 1) setFat(chain[i], chain[i + 1])
+                setFat(chain.last(), 0x0FFFFFFF)
+                cap = chain.size * b.spc * SEC
+            }
+            var pos = 0
+            for (c in chain) {
+                val o = clusOff(c)
+                val csz = b.spc * SEC
+                if (pos < data.size) {
+                    val n = minOf(csz, data.size - pos)
+                    System.arraycopy(data, pos, img, o, n)
+                    pos += n
+                    if (n < csz) {
+                        java.util.Arrays.fill(img, o + n, o + csz, 0.toByte())
+                    }
+                } else {
+                    // 目录体已写完：链上剩余簇全部清零（目录空闲区语义）
+                    java.util.Arrays.fill(img, o, o + csz, 0.toByte())
+                }
             }
         }
 
@@ -206,11 +277,9 @@ object FatLfnInjector {
                 off += 32
             }
             val body = out.toByteArray()
-            require(body.size <= data.size) { "目录重排溢出（条目过多）" }
-            val res = data.copyOf()
-            System.arraycopy(body, 0, res, 0, body.size)
-            java.util.Arrays.fill(res, body.size, res.size, 0.toByte())
-            return res to map
+            // v2.2.8: 溢出不再拒绝——writeChain 会自动从 FAT 分配新簇接链；
+            // 直接返回 body（可能大于原链），尾簇填零由 writeChain 负责
+            return body to map
         }
 
         fun walk(baseClus: Int, prefix: String) {

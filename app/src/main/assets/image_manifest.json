@@ -1,30 +1,30 @@
 {
-  "version": 2,
-  "updated": "2026-09-27",
-  "baseRepo": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator",
-  "images": [
+ "version": 2,
+ "updated": "2026-09-28",
+ "baseRepo": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator",
+ "images": [
+  {
+   "id": "vela-vapp-demo",
+   "name": "Vela vApp 固件 (APK 内置 · 全机型统一)",
+   "desc": "v2.2 起全机型统一固件：OpenVela/NuttX + vapp 运行时 (QuickJS + VDOM + LVGL + virtio-gpu)。nuttx.bin 与 data.img 均内置于 APK assets，无需联网下载，点击部署秒级就绪。启动后 nsh 自动 mount 数据盘并运行 vapp 快应用，VNC 按设备模板屏幕形状/分辨率呈现 vapp 渲染画面。数据盘 /resource/package/ 下的 .rpk 包均可经工坊安装并在虚拟机内真实执行。v2.2.8：固件运行时补齐真实 aiot-toolkit 编译产物契约（C 原生 $app_require$ 系统模块桩 + aiot.__ce__/__ci__/__cf__ + 函数式样式求值），数据盘回归 spc=1（512B 簇）根治固件 FAT 跨簇读取缺陷（v2.2.4 的 4KB 簇曾致真实包多簇文件加载失败→黑屏）。注：v2.2.4：数据盘曾为 4KB 簇并给 /vapps 预解包树注入小写 LFN 长名链（修复 NuttX 大小写敏感查找导致的解包写盘与 FAT 损坏）。",
+   "machine": "virt",
+   "kernel": "nuttx.bin",
+   "source": "OpenVela/NuttX + openrt (vapp runtime) · 内置于 APK assets/images",
+   "files": [
     {
-      "id": "vela-vapp-demo",
-      "name": "Vela vApp 固件 (APK 内置 · 全机型统一)",
-      "desc": "v2.2 起全机型统一固件：OpenVela/NuttX + vapp 运行时 (QuickJS + VDOM + LVGL + virtio-gpu)。nuttx.bin 与 data.img 均内置于 APK assets，无需联网下载，点击部署秒级就绪。启动后 nsh 自动 mount 数据盘并运行 vapp 快应用，VNC 按设备模板屏幕形状/分辨率呈现 vapp 渲染画面。数据盘 /resource/package/ 下的 .rpk 包均可经工坊安装并在虚拟机内真实执行。v2.2.4：数据盘重建为 4KB 簇并给 /vapps 预解包树注入小写 LFN 长名链（修复 NuttX 大小写敏感查找导致的解包写盘与 FAT 损坏）。",
-      "machine": "virt",
-      "kernel": "nuttx.bin",
-      "source": "OpenVela/NuttX + openrt (vapp runtime) · 内置于 APK assets/images",
-      "files": [
-        {
-          "url": "asset://images/nuttx.bin",
-          "sha256": "79efedee95bd0ab9ff6c6965a14ea00415a47d5f47d4bb158a5c6802346109a9",
-          "size": 1750576,
-          "out": "nuttx.bin"
-        },
-        {
-          "url": "asset://images/data.img",
-          "sha256": "b41a9ed482cce30737af26a15261ec2a6513490e83d0d1783c1dd721d4c3aafa",
-          "size": 67108864,
-          "out": "data.img",
-          "stateful": true
-        }
-      ]
+     "url": "asset://images/nuttx.bin",
+     "sha256": "80dc0d2e88fb9355dccba1fe15cdd278835a412f60b76439913cae468b8c7e8c",
+     "size": 1750576,
+     "out": "nuttx.bin"
+    },
+    {
+     "url": "asset://images/data.img",
+     "sha256": "a2347951939763996d164b582cae7dfb377744aefb98bc3754acc662edc3ede5",
+     "size": 67108864,
+     "out": "data.img",
+     "stateful": true
     }
-  ]
+   ]
+  }
+ ]
 }
