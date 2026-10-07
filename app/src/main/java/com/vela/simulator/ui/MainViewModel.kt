@@ -582,9 +582,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * 返回恢复成功数。调用方需保证无 QEMU 持盘。
      */
     private suspend fun restorePackagesFromDiskBackup(bak: java.io.File): Int {
-        val pkgs = runCatching { RpkInstaller.list(runtime, bak) }
+        // list 本身返回 Result<List<VmPackage>>，无需再包一层 runCatching
+        val pkgs = RpkInstaller.list(runtime, bak)
             .onFailure { FileLogger.e("rpk", "备份盘读取失败: ${bak.name}", it) }
-            .getOrNull() ?: return 0
+            .getOrDefault(emptyList())
         var ok = 0
         for (p in pkgs) {
             // 出厂包无需恢复（新盘自带）；空包名无法安装

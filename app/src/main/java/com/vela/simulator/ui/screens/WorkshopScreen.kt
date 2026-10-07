@@ -234,7 +234,9 @@ fun TemplateChips(
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(templates, key = { it.first.id }) { (t, _) ->
-            SelectChip(label = t.name, selected = t.id == selectedId) { onSelect(t.id) }
+            // 注意：SelectChip 末参是 Boolean(compact)，尾 lambda 无法自动绑定
+            // onClick —— 必须显式具名传参（CI 编译实锤）
+            SelectChip(label = t.name, selected = t.id == selectedId, onClick = { onSelect(t.id) })
         }
     }
 }
