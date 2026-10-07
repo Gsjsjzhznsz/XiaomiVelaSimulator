@@ -6,15 +6,15 @@
     {
       "id": "vela-vapp-demo",
       "name": "Vela vApp 固件 (APK 内置 · 全机型统一)",
-      "desc": "v2.2.8 全机型统一固件：OpenVela/NuttX + vapp 运行时 (QuickJS + VDOM + LVGL + virtio-gpu)。本版数据盘回归 512B 簇（spc=1），修复 v2.2.4 起 4KB 簇触发的固件 FAT 跨簇读取缺陷 —— 真实 aiot-toolkit 编译的 rpk（app.js 33KB+ 跨簇文件）此前无法加载正是该缺陷；固件运行时补齐 rspack 包契约（\\$ 系统模块桩 / aiot.__ce__/__ci__/__cf__ / $app.$def 注入 / keep-alive 修复），真实包可加载、渲染并常驻运行。nuttx.bin 与 data.img 均内置于 APK assets，无需联网下载。升级首启数据盘一次性迁移：自动备份旧盘并从工坊备份恢复已装应用。",
+      "desc": "v2.2.11 全机型统一固件：CJK 中文字体渲染（Sarasa Mono SC 16/24/32px，真实包中文文本不再空白）+ FAT NT 小写短名兼容（mtools/Windows 风格盘）+ LVGL 弹性布局/rgba 颜色/包内图片解码接入（LV_USE_FS_POSIX）+ 页面 VM 数据节合并（private/protected/public → 模板取值生效）。真实 BandQQ 包现可渲染空态界面（图标/按钮/中文提示/连接状态）。",
       "machine": "virt",
       "kernel": "nuttx.bin",
       "source": "OpenVela/NuttX + openrt (vapp runtime) · 内置于 APK assets/images",
       "files": [
         {
           "url": "asset://images/nuttx.bin",
-          "sha256": "8c7e541d4f8906b813f36f49db7a216629c0ad1357e4f9b3d3cdefeb59c7a843",
-          "size": 1754672,
+          "sha256": "c839ae6b019954476f5478746818032a88c0896f4615adf7d066d95be6475026",
+          "size": 3487280,
           "out": "nuttx.bin"
         },
         {
