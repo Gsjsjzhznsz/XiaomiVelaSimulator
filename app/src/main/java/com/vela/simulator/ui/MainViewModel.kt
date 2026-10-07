@@ -222,10 +222,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (!otherRunning) {
                     awaitQemuExit()
-                    val ok = images.ensureAssetsCurrent(t.imageId)
-                    if (!ok) {
+                    // v2.2.8: 返回 DeployReport —— 状态盘被重部署（升级换资产）时
+                    // 立即从 files/quickapps 备份恢复用户包（旧 Boolean 返回把迁移
+                    // 静默化，是升级后包全丢的盲区）
+                    val rep = images.ensureAssetsCurrent(t.imageId)
+                    if (!rep.ok) {
                         s.failWith("内置镜像部署校验失败，请到设备详情页重新部署", null)
                         return@launch
+                    }
+                    if (rep.statefulMigrated) {
+                        FileLogger.w("rpk", "数据盘资产升级迁移完成（备份=${rep.statefulBackup?.name ?: "无"})，开始恢复用户包")
+                        _vmInstallState.value = _vmInstallState.value.copy(
+                            busy = true, stage = "数据盘布局升级完成，正在恢复已装应用…", error = null,
+                        )
+                        val n = restoreUserPackages()
+                        FileLogger.i("rpk", "数据盘迁移恢复完成：$n 个用户包")
+                        refreshVmPackages()
                     }
                 } else {
                     FileLogger.w("session", "其他虚拟机运行中，跳过镜像一致性校验（不重部署）")
@@ -270,7 +282,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         FileLogger.w("rpk", "guest 故障($kind)，自动自愈后重启 ${failed.launchApp}")
         _vmInstallState.value = _vmInstallState.value.copy(
-            busy = true, stage = "虚拟机内包读取异常，正在自动修复数据盘…", error = null,
+            busy = true, stage = "虚拟机内包读取异常，正在自检数据盘…", error = null,
         )
         // 等当前会话退出（避免写盘竞争）
         val deadline = System.currentTimeMillis() + 12_000
@@ -281,9 +293,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         runCatching { failed.stop() }
         awaitQemuExit()
-        if (!repairDataDisk()) {
-            FileLogger.e("rpk", "自愈修复失败，保留手动指引")
-            return
+        // v2.2.8: 自愈不再盲目抹盘（22:17 真机日志实锤：package_not_found 时真盘
+        // mtools 可读、包字节完好，是固件查找层问题 —— 抹盘救不了它，反而与启动
+        // 链路并发竞争把恢复好的包又抹掉）。改为健康门控：
+        //  · FAT 真损坏（探针失败 + 损坏签名）→ DiskDoctor（备份+重部署+恢复）
+        //  · 盘健康 → 仅原样重启验证，用户数据分毫不动
+        val (diskOk, probeOut) = RpkInstaller.diskHealthProbe(runtime, vmDataDisk)
+        val corrupt = !diskOk && RpkInstaller.isFatCorruptOutput(probeOut)
+        if (corrupt) {
+            if (!repairDataDisk()) {
+                FileLogger.e("rpk", "自愈修复失败，保留手动指引")
+                return
+            }
+        } else {
+            FileLogger.i("rpk", "guest 故障($kind)但数据盘健康（探针=${if (diskOk) "OK" else "非损坏签名错误"}），跳过抹盘自愈，仅重启验证")
         }
         refreshVmPackages()
         // 用户已手动重启了同一模板 → 不再重复启动
@@ -500,36 +523,49 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             // v2.2.7: DiskDoctor 修复必须强制重部署干净镜像（ensureAssetsCurrent
             // 默认按「部署标记」判定，用户数据盘原样保留 —— 只有显式 force 才重拷；
-            // 重拷后下方从 files/quickapps 备份恢复用户包）
-            val ok = images.ensureAssetsCurrent(dataImageEntryId(), forceRedeploy = true)
-            if (!ok || !vmDataDisk.isFile) {
+            // v2.2.8: 重部署前自动快照备份旧盘，重拷后从 files/quickapps 备份恢复用户包）
+            val rep = images.ensureAssetsCurrent(dataImageEntryId(), forceRedeploy = true)
+            if (!rep.ok || !vmDataDisk.isFile) {
                 _vmInstallState.value = VmInstallUiState(
                     error = "数据盘修复失败：内置镜像重部署异常，请到设备详情页手动「重新部署」",
                 )
                 return false
             }
-            // 同包多份历史导入取最新（listImported 已按时间降序）
-            val backups = RpkManager.listImported(ctx)
-                .mapNotNull { f -> RpkManager.parse(f).getOrNull()?.let { it.packageId to f } }
-                .groupBy({ it.first }) { it.second }
-                .map { (id, files) -> id to files.first() }
-                .filter { it.first.isNotBlank() && it.first != excludePackageId }
-            var okCount = 0
-            for ((id, f) in backups) {
-                runCatching { RpkInstaller.install(runtime, vmDataDisk, f) }
-                    .onSuccess { okCount++ }
-                    .onFailure { FileLogger.e("rpk", "DiskDoctor: 恢复 $id 失败", it) }
+            if (rep.statefulBackup != null) {
+                FileLogger.i("rpk", "DiskDoctor: 旧盘已备份为 ${rep.statefulBackup.name}（可手动回滚/取证）")
             }
-            FileLogger.i("rpk", "DiskDoctor: 修复完成，恢复 $okCount/${backups.size} 个用户包")
+            val restored = restoreUserPackages(excludePackageId)
+            FileLogger.i("rpk", "DiskDoctor: 修复完成，恢复 $restored 个用户包")
             _vmInstallState.value = VmInstallUiState(
-                stage = if (backups.isEmpty()) "数据盘已自动修复"
-                        else "数据盘已自动修复（恢复 $okCount 个包）",
+                stage = if (restored == 0) "数据盘已自动修复" else "数据盘已自动修复（恢复 $restored 个包）",
             )
             return true
         } finally {
             diskRepairing = false
             _vmDiskBusy.value = false
         }
+    }
+
+    /**
+     * v2.2.8: 从 files/quickapps 导入备份恢复用户包到数据盘（幂等）。
+     * 供 DiskDoctor 修复与「数据盘迁移重部署」两条链路共用 —— 旧实现只有
+     * DiskDoctor 会恢复，升级换资产的重部署把用户包静默清空（丢盘主诉之一）。
+     * 返回恢复成功数。调用方需保证无 QEMU 持盘（先 prepareDiskExclusive/未启动）。
+     */
+    private suspend fun restoreUserPackages(excludePackageId: String? = null): Int {
+        // 同包多份历史导入取最新（listImported 已按时间降序）
+        val backups = RpkManager.listImported(ctx)
+            .mapNotNull { f -> RpkManager.parse(f).getOrNull()?.let { it.packageId to f } }
+            .groupBy({ it.first }) { it.second }
+            .map { (id, files) -> id to files.first() }
+            .filter { it.first.isNotBlank() && it.first != excludePackageId }
+        var okCount = 0
+        for ((id, f) in backups) {
+            runCatching { RpkInstaller.install(runtime, vmDataDisk, f) }
+                .onSuccess { okCount++ }
+                .onFailure { FileLogger.e("rpk", "恢复 $id 失败", it) }
+        }
+        return okCount
     }
 
     /** 安装已导入的 rpk 到数据盘；完成后自动刷新列表。写盘前自动停止运行中的虚拟机 */

@@ -30,6 +30,20 @@ import java.util.concurrent.TimeUnit
 /** v2.2.7: 状态盘部署决策（顶层枚举，随纯函数一起被单测锁定） */
 enum class DeployDecision { KEEP, DEPLOY, ADOPT_WRITE_MARKER }
 
+/**
+ * v2.2.8: 部署结果报告（参考 vortex 的 AVD 生命周期契约：数据盘是用户状态，
+ * 任何重部署都必须可追溯、可回滚）。
+ * @param ok 部署链路是否成功（镜像文件就绪）
+ * @param statefulMigrated 状态盘是否被重部署（升级换资产/强制修复）——调用方
+ *                         必须随后从 files/quickapps 备份恢复用户包
+ * @param statefulBackup 重部署前旧盘的备份文件（取证/手动回滚用；首次部署为 null）
+ */
+data class DeployReport(
+    val ok: Boolean,
+    val statefulMigrated: Boolean = false,
+    val statefulBackup: java.io.File? = null,
+)
+
 class ImageManager(private val context: Context) {
 
     companion object {
@@ -178,7 +192,11 @@ class ImageManager(private val context: Context) {
 
     /** v2.1: 从 APK assets 拷贝内置镜像（asset://images/xxx → images/xxx）
      *  v2.2.1: 清单含 SHA256 时校验旧文件，不匹配则重新拷贝 —— 修复升级后旧
-     *  损坏镜像永不替换的问题（本版 data.img 重建了 FAT 一致性，必须能覆盖旧文件） */
+     *  损坏镜像永不替换的问题（本版 data.img 重建了 FAT 一致性，必须能覆盖旧文件）
+     *  v2.2.8: 原子化落盘（参考 vortex VelaImageStore 的 .part → renameTo 契约）——
+     *  先写 <dest>.tmp 并 fsync，再 rename 覆盖。旧实现 O_TRUNC 直写活盘 + 预删除，
+     *  拷贝中途进程被杀会留下 0 字节/半截 data.img → FAT 全毁 → 触发 DiskDoctor
+     *  再抹一次的连锁丢盘；rename 在 POSIX 语义下要么全旧要么全新，无中间态。 */
     private fun copyFromAssets(assetPath: String, dest: File, label: String, expectSha256: String = "") {
         if (dest.isFile && dest.length() > 0) {
             val stale = expectSha256.isNotEmpty() && !verifyKernel(label, expectSha256)
@@ -187,14 +205,57 @@ class ImageManager(private val context: Context) {
                 return
             }
             progress?.onStage("内置镜像版本更新，重新部署 $label")
-            runCatching { dest.delete() }
         }
+        atomicCopyAsset(assetPath, dest, label)
+    }
+
+    /** v2.2.8: 无条件原子拷贝（不走「已就绪早退」，供部署决策分支显式调用） */
+    private fun atomicCopyAsset(assetPath: String, dest: File, label: String) {
         progress?.onStage("部署内置镜像 $label")
         dest.parentFile?.mkdirs()
+        val tmp = File(dest.parentFile, dest.name + ".tmp")
         context.assets.open(assetPath).use { ins ->
-            dest.outputStream().use { ins.copyTo(it) }
+            java.io.FileOutputStream(tmp).use { outs ->
+                ins.copyTo(outs)
+                outs.fd.sync()
+            }
+        }
+        if (!tmp.renameTo(dest)) {
+            // 极端文件系统不支持覆盖 rename → 退化为先删后改（此时新盘已完整落盘）
+            dest.delete()
+            check(tmp.renameTo(dest)) { "镜像部署 rename 失败: $tmp -> $dest" }
         }
         progress?.onLog("内置镜像部署完成: $label")
+    }
+
+    /**
+     * v2.2.8: 重部署前对状态盘做快照备份（data.img.bak-<时间戳>）。
+     * 参考 vortex「wipeData 仅显式且可追溯」：任何会覆盖用户盘的操作都必须
+     * 先留可回滚副本。保留最近 2 份，超出自动清理（64MB/份，防存储膨胀）。
+     */
+    private fun backupStatefulImage(dest: File, label: String): File? {
+        if (!dest.isFile || dest.length() <= 0L) return null
+        val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+            .format(java.util.Date())
+        val bak = File(imagesDir, "$label.bak-$stamp")
+        val ok = runCatching {
+            val tmp = File(imagesDir, bak.name + ".tmp")
+            dest.inputStream().use { ins ->
+                java.io.FileOutputStream(tmp).use { outs -> ins.copyTo(outs); outs.fd.sync() }
+            }
+            tmp.renameTo(bak)
+        }.getOrDefault(false)
+        if (!ok) {
+            com.vela.simulator.util.FileLogger.w("image", "状态盘备份失败（继续重部署，无回滚副本）: $bak")
+            return null
+        }
+        com.vela.simulator.util.FileLogger.i("image", "状态盘已备份: ${bak.name} (${dest.length()}B)")
+        // 保留最近 2 份
+        imagesDir.listFiles { f -> f.isFile && f.name.startsWith("$label.bak-") }
+            ?.sortedByDescending { it.name }
+            ?.drop(2)
+            ?.forEach { runCatching { it.delete() } }
+        return bak
     }
 
     /**
@@ -218,17 +279,26 @@ class ImageManager(private val context: Context) {
      *      · 其余（含内容 SHA 任何变化）→ 保留现状（用户包不受影响）。
      *  - forceRedeploy=true（仅 DiskDoctor 修复路径用）：删文件+标记强制重拷，
      *    部署后由调用方负责从 files/quickapps 备份恢复用户包。
+     *
+     * v2.2.8 硬化（用户反馈「数据盘一直丢失」+ vortex 契约参考）：
+     *  - 状态盘重部署前自动快照备份（data.img.bak-<ts>，留 2 份），任何情况
+     *    都不再「先删后拷」裸奔；
+     *  - 返回 DeployReport：调用方可感知「状态盘被重部署」并立即恢复用户包，
+     *    旧 Boolean 返回把迁移静默化，是升级换资产后包全丢的盲区；
+     *  - 拷贝全程原子化（tmp+rename），进程被杀不再留下半截盘。
      */
-    suspend fun ensureAssetsCurrent(entryId: String, forceRedeploy: Boolean = false): Boolean = withContext(Dispatchers.IO) {
+    suspend fun ensureAssetsCurrent(entryId: String, forceRedeploy: Boolean = false): DeployReport = withContext(Dispatchers.IO) {
         val entry = loadManifest().images.firstOrNull { it.id == entryId }
-            ?: return@withContext true
+            ?: return@withContext DeployReport(true)
         var allOk = true
+        var migrated = false
+        var lastBackup: File? = null
         for (f in entry.files) {
             if (!f.url.startsWith("asset://")) continue
             val dest = kernelFile(f.out)
             val marker = deployedMarker(f.out)
             if (forceRedeploy) {
-                runCatching { dest.delete(); marker.delete() }
+                runCatching { marker.delete() }
             }
             val missing = !dest.isFile || dest.length() <= 0
             if (isStatefulImage(f.out, f.stateful)) {
@@ -236,21 +306,34 @@ class ImageManager(private val context: Context) {
                 val markerContent = if (marker.isFile) runCatching { marker.readText().trim() }.getOrNull() else null
                 when (decideStatefulDeploy(!missing, markerContent, manifestSha, forceRedeploy)) {
                     DeployDecision.DEPLOY -> {
-                        if (dest.isFile) {
-                            // APK 升级更换了出厂数据盘资产 → 一次性重部署
-                            progress?.onStage("数据镜像版本更新，重新部署 ${f.out}")
-                            runCatching { dest.delete() }
+                        val replacing = dest.isFile
+                        if (replacing) {
+                            // APK 升级更换出厂数据盘资产 / DiskDoctor 强制修复
+                            // → 先备份旧盘再重部署（v2.2.8：绝不无副本覆盖用户盘）
+                            progress?.onStage("数据镜像版本更新，备份并重新部署 ${f.out}")
+                            lastBackup = backupStatefulImage(dest, f.out)
                         } else {
                             progress?.onStage("部署内置镜像 ${f.out}")
                         }
-                        copyFromAssets(f.url.removePrefix("asset://"), dest, f.out)
+                        // v2.2.8: 无条件原子拷贝（不走 copyFromAssets 的已就绪早退，
+                        // 否则重部署会被静默跳过）
+                        atomicCopyAsset(f.url.removePrefix("asset://"), dest, f.out)
                         if (manifestSha.isNotEmpty() && !verifyKernel(f.out, manifestSha)) allOk = false
                         writeDeployedMarker(f.out, manifestSha)
+                        if (replacing) migrated = true
                     }
                     DeployDecision.ADOPT_WRITE_MARKER -> {
-                        // 老版本升级首启：盘上有用户数据且无标记 —— 采纳现状，绝不重拷
-                        progress?.onLog("数据盘部署标记缺失，采纳现有数据盘（不重置）: ${f.out}")
+                        /* v2.2.8 语义升级：老版本升级首启（标记缺失、盘在）= 一次性迁移。
+                         * v2.2.7 的「原样采纳」会让 v2.2.4-2.2.7 的 spc=8 旧盘永远停留
+                         * 在固件跨簇读取缺陷区（真实包 app.js 必挂）——本版出厂数据盘
+                         * 回归 spc=1，必须迁移。安全性：先备份旧盘（可回滚），重部署后
+                         * 由调用方从 files/quickapps 备份恢复用户包（DeployReport.migrated）。 */
+                        progress?.onStage("数据盘布局升级，备份并迁移 ${f.out}")
+                        lastBackup = backupStatefulImage(dest, f.out)
+                        atomicCopyAsset(f.url.removePrefix("asset://"), dest, f.out)
+                        if (manifestSha.isNotEmpty() && !verifyKernel(f.out, manifestSha)) allOk = false
                         writeDeployedMarker(f.out, manifestSha)
+                        migrated = true
                     }
                     DeployDecision.KEEP -> { /* 标记匹配：用户数据盘原样保留（装包导致的 SHA 变化无关紧要） */ }
                 }
@@ -264,8 +347,8 @@ class ImageManager(private val context: Context) {
                 if (f.sha256.isNotEmpty()) {
                     val actual = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
                     if (!actual.equals(f.sha256, ignoreCase = true)) {
-                        progress?.onStage("数据镜像版本更新，重新部署 ${f.out}")
-                        runCatching { dest.delete() }
+                        // 只读内核损坏 → 原子重拷（rename 覆盖，无中间态）
+                        progress?.onStage("内核镜像版本更新，重新部署 ${f.out}")
                         copyFromAssets(f.url.removePrefix("asset://"), dest, f.out, f.sha256)
                         val after = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
                         if (!after.equals(f.sha256, ignoreCase = true)) allOk = false
@@ -273,7 +356,7 @@ class ImageManager(private val context: Context) {
                 }
             }
         }
-        allOk
+        DeployReport(allOk, migrated, lastBackup)
     }
 
     /** v2.2.7: 状态盘部署标记（内容 = 清单 sha256 = APK 内置资产的出厂身份） */
@@ -321,13 +404,21 @@ class ImageManager(private val context: Context) {
         }
     }
 
-    /** 从 SAF Uri 导入本地镜像 */
+    /** 从 SAF Uri 导入本地镜像（v2.2.8: 原子落盘 tmp+rename，中途失败不留半截文件） */
     fun import(uri: android.net.Uri, outName: String): Result<File> = runCatching {
         imagesDir.mkdirs()
         val dest = kernelFile(outName)
+        val tmp = File(imagesDir, "$outName.tmp")
         context.contentResolver.openInputStream(uri)?.use { ins ->
-            dest.outputStream().use { ins.copyTo(it) }
+            java.io.FileOutputStream(tmp).use { outs ->
+                ins.copyTo(outs)
+                outs.fd.sync()
+            }
         } ?: error("无法读取所选文件")
+        if (!tmp.renameTo(dest)) {
+            dest.delete()
+            check(tmp.renameTo(dest)) { "镜像导入 rename 失败: $tmp -> $dest" }
+        }
         dest
     }
 

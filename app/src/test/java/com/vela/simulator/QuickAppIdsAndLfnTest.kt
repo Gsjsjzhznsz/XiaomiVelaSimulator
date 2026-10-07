@@ -86,9 +86,11 @@ object SyntheticFat {
         System.arraycopy(u32(FATSZ), 0, img, 0x24, 4)
         System.arraycopy(u32(ROOTCLUS), 0, img, 0x2C, 4)
         img[0x42] = 0x29                                   // FAT32 扩展引导标志在 0x42（0x26 是 fatsz32 内部！）
-        // FAT：EOC 标记簇 2
+        // FAT：EOC 标记簇 2（双副本同步 —— 真实镜像 FAT1==FAT2）
         fun fatOff(n: Int) = RSVD * SEC + n * 4
+        fun fatOff2(n: Int) = (RSVD + FATSZ) * SEC + n * 4
         System.arraycopy(u32(0x0FFFFFF8), 0, img, fatOff(2), 4)
+        System.arraycopy(u32(0x0FFFFFF8), 0, img, fatOff2(2), 4)
         return img
     }
 
@@ -128,9 +130,13 @@ class FatLfnInjectorTest {
         // 簇4：app.js 内容
         val data = "hi\n".toByteArray()
         System.arraycopy(data, 0, img, SyntheticFat.clusOff(4), data.size)
-        // FAT 链：2/3/4 均 EOC（单簇）
+        // FAT 链：2/3/4 均 EOC（双副本同步）
         fun fatOff(n: Int) = SyntheticFat.RSVD * SyntheticFat.SEC + n * 4
-        for (c in 3..4) System.arraycopy(SyntheticFat.u32(0x0FFFFFF8), 0, img, fatOff(c), 4)
+        fun fatOff2(n: Int) = (SyntheticFat.RSVD + SyntheticFat.FATSZ) * SyntheticFat.SEC + n * 4
+        for (c in 3..4) {
+            System.arraycopy(SyntheticFat.u32(0x0FFFFFF8), 0, img, fatOff(c), 4)
+            System.arraycopy(SyntheticFat.u32(0x0FFFFFF8), 0, img, fatOff2(c), 4)
+        }
         return img
     }
 

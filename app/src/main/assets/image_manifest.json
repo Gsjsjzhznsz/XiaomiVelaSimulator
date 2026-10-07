@@ -1,25 +1,25 @@
 {
   "version": 2,
-  "updated": "2026-09-27",
+  "updated": "2026-10-07",
   "baseRepo": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator",
   "images": [
     {
       "id": "vela-vapp-demo",
       "name": "Vela vApp 固件 (APK 内置 · 全机型统一)",
-      "desc": "v2.2 起全机型统一固件：OpenVela/NuttX + vapp 运行时 (QuickJS + VDOM + LVGL + virtio-gpu)。nuttx.bin 与 data.img 均内置于 APK assets，无需联网下载，点击部署秒级就绪。启动后 nsh 自动 mount 数据盘并运行 vapp 快应用，VNC 按设备模板屏幕形状/分辨率呈现 vapp 渲染画面。数据盘 /resource/package/ 下的 .rpk 包均可经工坊安装并在虚拟机内真实执行。v2.2.4：数据盘重建为 4KB 簇并给 /vapps 预解包树注入小写 LFN 长名链（修复 NuttX 大小写敏感查找导致的解包写盘与 FAT 损坏）。",
+      "desc": "v2.2.8 全机型统一固件：OpenVela/NuttX + vapp 运行时 (QuickJS + VDOM + LVGL + virtio-gpu)。本版数据盘回归 512B 簇（spc=1），修复 v2.2.4 起 4KB 簇触发的固件 FAT 跨簇读取缺陷 —— 真实 aiot-toolkit 编译的 rpk（app.js 33KB+ 跨簇文件）此前无法加载正是该缺陷；固件运行时补齐 rspack 包契约（\\$ 系统模块桩 / aiot.__ce__/__ci__/__cf__ / $app.$def 注入 / keep-alive 修复），真实包可加载、渲染并常驻运行。nuttx.bin 与 data.img 均内置于 APK assets，无需联网下载。升级首启数据盘一次性迁移：自动备份旧盘并从工坊备份恢复已装应用。",
       "machine": "virt",
       "kernel": "nuttx.bin",
       "source": "OpenVela/NuttX + openrt (vapp runtime) · 内置于 APK assets/images",
       "files": [
         {
           "url": "asset://images/nuttx.bin",
-          "sha256": "79efedee95bd0ab9ff6c6965a14ea00415a47d5f47d4bb158a5c6802346109a9",
-          "size": 1750576,
+          "sha256": "8c7e541d4f8906b813f36f49db7a216629c0ad1357e4f9b3d3cdefeb59c7a843",
+          "size": 1754672,
           "out": "nuttx.bin"
         },
         {
           "url": "asset://images/data.img",
-          "sha256": "b41a9ed482cce30737af26a15261ec2a6513490e83d0d1783c1dd721d4c3aafa",
+          "sha256": "4fba57ed2a7d6af6a8c1c86d5336d7ba18c00f8bcfdead3752b89b7481ec6814",
           "size": 67108864,
           "out": "data.img",
           "stateful": true

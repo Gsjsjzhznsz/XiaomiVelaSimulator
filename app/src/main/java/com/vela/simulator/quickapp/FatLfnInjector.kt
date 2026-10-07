@@ -80,7 +80,70 @@ object FatLfnInjector {
                 ((img[off + 3].toInt() and 0xFF) shl 24)) and 0x0FFFFFFF
         }
 
+        /**
+         * v2.2.8: 写 FAT 表项（同时镜像全部 FAT 副本）。
+         * 旧实现从不写 FAT（纯重写既有簇），目录增长必须分配新簇 → 需要写表。
+         * 高 4 位保留位恒清零（0），与 mtools/出厂镜像一致，避免固件半更新式
+         * 的 0xffff 高位残留。
+         */
+        fun fatEntrySet(n: Int, v: Int) {
+            if (n < 2 || n >= maxclus + 2) return
+            val val32 = v and 0x0FFFFFFF
+            for (fi in 0 until b.nfats) {
+                val off = (b.rsvd + fi * b.fatsz) * SEC + n * 4
+                img[off] = (val32 and 0xFF).toByte()
+                img[off + 1] = ((val32 shr 8) and 0xFF).toByte()
+                img[off + 2] = ((val32 shr 16) and 0xFF).toByte()
+                img[off + 3] = ((val32 shr 24) and 0xFF).toByte()
+            }
+        }
+
         fun clusOff(c: Int) = (b.dataStart + (c - 2) * b.spc) * SEC
+
+        /** v2.2.8: 分配一个空闲簇（FAT=0），置 EOC 并返回簇号；无空闲抛异常 */
+        fun allocCluster(): Int {
+            for (n in 2 until maxclus + 2) {
+                if (fatEntry(n) == 0) {
+                    fatEntrySet(n, 0x0FFFFFFF)
+                    return n
+                }
+            }
+            throw IllegalStateException("FAT 无空闲簇（目录增长失败）")
+        }
+
+        /** v2.2.8: 链尾簇号与总容量（字节） */
+        fun chainTailAndCapacity(start: Int): Pair<Int, Int> {
+            var c = start
+            var bytes = 0
+            var last = start
+            val seen = HashSet<Int>()
+            while (c in 2 until maxclus + 2 && seen.add(c)) {
+                bytes += b.spc * SEC
+                last = c
+                c = fatEntry(c)
+                if (c < 0 || c >= 0x0FFFFFF8) break
+            }
+            return last to bytes
+        }
+
+        /**
+         * v2.2.8: 目录跨簇增长（重写上会话丢失的修复）。
+         * spc=1（512B 簇）出厂盘上，注入 LFN 后目录体几乎必然超出既有簇链容量
+         * （512B = 16 条目），必须扩链：从 FAT 分配新簇接到链尾、数据区填零
+         * （0x00 = 目录结束符语义）、FAT 双副本同步。不扩链时注入器会在大目录上
+         * 报「目录重排溢出」或静默截断（v2.2.6 22:17 丢盘链路的贡献因素之一）。
+         */
+        fun growChain(start: Int, needed: Int) {
+            var (tail, have) = chainTailAndCapacity(start)
+            while (have < needed) {
+                val nc = allocCluster()
+                fatEntrySet(tail, nc)
+                fatEntrySet(nc, 0x0FFFFFFF)
+                java.util.Arrays.fill(img, clusOff(nc), clusOff(nc) + b.spc * SEC, 0.toByte())
+                tail = nc
+                have += b.spc * SEC
+            }
+        }
 
         fun readChain(start: Int): ByteArray {
             val out = java.io.ByteArrayOutputStream()
@@ -99,9 +162,18 @@ object FatLfnInjector {
             var pos = 0
             val seen = HashSet<Int>()
             while (c in 2 until maxclus + 2 && seen.add(c)) {
-                val n = minOf(b.spc * SEC, data.size - pos)
-                if (n <= 0) break
-                System.arraycopy(data, pos, img, clusOff(c), n)
+                val cap = b.spc * SEC
+                val n = minOf(cap, data.size - pos).coerceAtLeast(0)
+                if (n > 0) System.arraycopy(data, pos, img, clusOff(c), n)
+                if (n < cap) {
+                    // v2.2.8: 目录体写完后剩余字节清零（0x00=目录结束）+ 尾簇置 EOC，
+                    // 防负偏移/防旧残留条目被 guest 当有效项（上会话总结中的「尾簇填零」修复）。
+                    // 已是 EOC 的簇不重写 —— 保持 v2.2.5「非增长注入零 FAT 写」的兼容语义
+                    java.util.Arrays.fill(img, clusOff(c) + n, clusOff(c) + cap, 0.toByte())
+                    val cur = fatEntry(c)
+                    if (cur < 0x0FFFFFF8) fatEntrySet(c, 0x0FFFFFFF)
+                    return
+                }
                 pos += n
                 c = fatEntry(c)
                 if (c < 0 || c >= 0x0FFFFFF8) break
@@ -164,7 +236,9 @@ object FatLfnInjector {
 
         /**
          * 重排目录：无 LFN 链的短条目（除 ./.. 与卷标）前注入小写 LFN 链；
-         * 已有 LFN 链的组【原样保留全部字节】。返回 (新目录字节, 条目表)。
+         * 已有 LFN 链的组【原样保留全部字节】。返回 (新目录体, 条目表)。
+         * v2.2.8: 返回紧凑 body（不再填充到原容量），由调用方按需扩链后写回 ——
+         * 移除旧的「目录重排溢出」硬失败（spc=1 大目录必然超容量，扩链即合法）。
          */
         fun rebuild(data: ByteArray, pathPrefix: String): Pair<ByteArray, List<Ent>> {
             val out = java.io.ByteArrayOutputStream()
@@ -206,16 +280,14 @@ object FatLfnInjector {
                 off += 32
             }
             val body = out.toByteArray()
-            require(body.size <= data.size) { "目录重排溢出（条目过多）" }
-            val res = data.copyOf()
-            System.arraycopy(body, 0, res, 0, body.size)
-            java.util.Arrays.fill(res, body.size, res.size, 0.toByte())
-            return res to map
+            return body to map
         }
 
         fun walk(baseClus: Int, prefix: String) {
             val data = readChain(baseClus)
             val (newData, map) = rebuild(data, prefix)
+            // v2.2.8: 目录跨簇增长 —— 注入后超出既有链容量则先扩链再写回
+            if (newData.size > data.size) growChain(baseClus, newData.size)
             writeChain(baseClus, newData)
             for (ent in map) {
                 if (ent.short != "." && ent.short != ".." &&
@@ -229,6 +301,7 @@ object FatLfnInjector {
         // 根目录：注入（含子树自身条目的小写 LFN），再递归子树
         val rootData = readChain(b.rootclus)
         val (newRoot, rootMap) = rebuild(rootData, "")
+        if (newRoot.size > rootData.size) growChain(b.rootclus, newRoot.size)
         writeChain(b.rootclus, newRoot)
         var found = false
         for (ent in rootMap) {
