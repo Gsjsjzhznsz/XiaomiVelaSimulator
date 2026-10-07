@@ -235,8 +235,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         _vmInstallState.value = _vmInstallState.value.copy(
                             busy = true, stage = "数据盘布局升级完成，正在恢复已装应用…", error = null,
                         )
-                        val n = restoreUserPackages()
-                        FileLogger.i("rpk", "数据盘迁移恢复完成：$n 个用户包")
+                        try {
+                            var n = restoreUserPackages()
+                            // v2.2.10: files/quickapps 只在「导入」时写入 —— v2.2.4~2.2.7
+                            // 时代的包可能只存在于数据盘。quickapps 恢复为 0 时，直接
+                            // 从旧盘备份镜像提取 .rpk 重装（mtools 读镜像不经固件 FAT
+                            // 驱动，跨簇布局照常可读）。真机 vela.log 2026-10-07 实锤：
+                            // 迁移完成但恢复 0 个包，用户已装包全部丢失。
+                            if (n == 0 && rep.statefulBackup != null && rep.statefulBackup.isFile) {
+                                n += restorePackagesFromDiskBackup(rep.statefulBackup)
+                            }
+                            FileLogger.i("rpk", "数据盘迁移恢复完成：$n 个用户包")
+                        } finally {
+                            // v2.2.10 关键修复：busy 必须复位。原实现把 busy 置 true 后
+                            // 永不释放，installRpkToVm/installRpkAndLaunch 的 busy 门禁
+                            // 把后续所有安装操作静默吞掉 —— 用户看到的就是
+                            // “导入后点安装无任何反应”（“数据盘无法导入”真机实锤）。
+                            _vmInstallState.value = _vmInstallState.value.copy(
+                                busy = false,
+                                stage = if (_vmInstallState.value.error != null) _vmInstallState.value.stage else "",
+                            )
+                        }
                         refreshVmPackages()
                     }
                 } else {
@@ -284,41 +303,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _vmInstallState.value = _vmInstallState.value.copy(
             busy = true, stage = "虚拟机内包读取异常，正在自检数据盘…", error = null,
         )
-        // 等当前会话退出（避免写盘竞争）
-        val deadline = System.currentTimeMillis() + 12_000
-        while (System.currentTimeMillis() < deadline) {
-            val st = failed.state.value
-            if (st == QemuSession.State.EXITED || st == QemuSession.State.FAILED || st == QemuSession.State.IDLE) break
-            delay(300)
-        }
-        runCatching { failed.stop() }
-        awaitQemuExit()
-        // v2.2.8: 自愈不再盲目抹盘（22:17 真机日志实锤：package_not_found 时真盘
-        // mtools 可读、包字节完好，是固件查找层问题 —— 抹盘救不了它，反而与启动
-        // 链路并发竞争把恢复好的包又抹掉）。改为健康门控：
-        //  · FAT 真损坏（探针失败 + 损坏签名）→ DiskDoctor（备份+重部署+恢复）
-        //  · 盘健康 → 仅原样重启验证，用户数据分毫不动
-        val (diskOk, probeOut) = RpkInstaller.diskHealthProbe(runtime, vmDataDisk)
-        val corrupt = !diskOk && RpkInstaller.isFatCorruptOutput(probeOut)
-        if (corrupt) {
-            if (!repairDataDisk()) {
-                FileLogger.e("rpk", "自愈修复失败，保留手动指引")
+        try {
+            // 等当前会话退出（避免写盘竞争）
+            val deadline = System.currentTimeMillis() + 12_000
+            while (System.currentTimeMillis() < deadline) {
+                val st = failed.state.value
+                if (st == QemuSession.State.EXITED || st == QemuSession.State.FAILED || st == QemuSession.State.IDLE) break
+                delay(300)
+            }
+            runCatching { failed.stop() }
+            awaitQemuExit()
+            // v2.2.8: 自愈不再盲目抹盘（22:17 真机日志实锤：package_not_found 时真盘
+            // mtools 可读、包字节完好，是固件查找层问题 —— 抹盘救不了它，反而与启动
+            // 链路并发竞争把恢复好的包又抹掉）。改为健康门控：
+            //  · FAT 真损坏（探针失败 + 损坏签名）→ DiskDoctor（备份+重部署+恢复）
+            //  · 盘健康 → 仅原样重启验证，用户数据分毫不动
+            val (diskOk, probeOut) = RpkInstaller.diskHealthProbe(runtime, vmDataDisk)
+            val corrupt = !diskOk && RpkInstaller.isFatCorruptOutput(probeOut)
+            if (corrupt) {
+                if (!repairDataDisk()) {
+                    FileLogger.e("rpk", "自愈修复失败，保留手动指引")
+                    return
+                }
+            } else {
+                FileLogger.i("rpk", "guest 故障($kind)但数据盘健康（探针=${if (diskOk) "OK" else "非损坏签名错误"}），跳过抹盘自愈，仅重启验证")
+            }
+            refreshVmPackages()
+            // 用户已手动重启了同一模板 → 不再重复启动
+            val cur = sessions[t.id]
+            if (cur != null && cur !== failed &&
+                (cur.state.value == QemuSession.State.RUNNING || cur.state.value == QemuSession.State.BOOTING)) {
+                FileLogger.i("rpk", "自愈期间用户已重启会话，跳过自动重启")
                 return
             }
-        } else {
-            FileLogger.i("rpk", "guest 故障($kind)但数据盘健康（探针=${if (diskOk) "OK" else "非损坏签名错误"}），跳过抹盘自愈，仅重启验证")
+            _vmInstallState.value = _vmInstallState.value.copy(stage = "数据盘已修复，重新启动 ${t.name}…")
+            FileLogger.i("rpk", "自愈完成，重新启动会话 ${t.id} launch=${failed.launchApp}")
+            startSession(t, failed.launchApp)
+        } finally {
+            // v2.2.10: 自愈结束必须释放 busy 门禁。原实现所有退出路径（含修复失败/
+            // 用户已重启）都不复位 busy，与迁移路径同样的静默门禁死锁。
+            _vmInstallState.value = _vmInstallState.value.copy(
+                busy = false,
+                stage = if (_vmInstallState.value.error != null) _vmInstallState.value.stage else "",
+            )
         }
-        refreshVmPackages()
-        // 用户已手动重启了同一模板 → 不再重复启动
-        val cur = sessions[t.id]
-        if (cur != null && cur !== failed &&
-            (cur.state.value == QemuSession.State.RUNNING || cur.state.value == QemuSession.State.BOOTING)) {
-            FileLogger.i("rpk", "自愈期间用户已重启会话，跳过自动重启")
-            return
-        }
-        _vmInstallState.value = _vmInstallState.value.copy(stage = "数据盘已修复，重新启动 ${t.name}…")
-        FileLogger.i("rpk", "自愈完成，重新启动会话 ${t.id} launch=${failed.launchApp}")
-        startSession(t, failed.launchApp)
     }
 
     /**
@@ -547,6 +575,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * v2.2.10: 从旧数据盘备份镜像直接提取用户包重装（迁移恢复的第二条腿）。
+     * files/quickapps 只在「导入」时写入 —— v2.2.4~2.2.7 时代的包可能只存在于
+     * 数据盘；仅靠 quickapps 恢复会出现“迁移完成，恢复 0 个包”（真机实锤）。
+     * mtools 读镜像不经固件 FAT 驱动，spc=8 旧盘照常可读。
+     * 返回恢复成功数。调用方需保证无 QEMU 持盘。
+     */
+    private suspend fun restorePackagesFromDiskBackup(bak: java.io.File): Int {
+        val pkgs = runCatching { RpkInstaller.list(runtime, bak) }
+            .onFailure { FileLogger.e("rpk", "备份盘读取失败: ${bak.name}", it) }
+            .getOrNull() ?: return 0
+        var ok = 0
+        for (p in pkgs) {
+            // 出厂包无需恢复（新盘自带）；空包名无法安装
+            if (p.packageId.isBlank() || p.packageId == "com.vela.demo") continue
+            runCatching {
+                val f = RpkInstaller.exportRpk(runtime, bak, p.fileName)
+                    ?: error("备份盘提取 ${p.fileName} 失败")
+                RpkInstaller.install(runtime, vmDataDisk, f).getOrThrow()
+            }
+                .onSuccess { ok++ }
+                .onFailure { FileLogger.e("rpk", "备份盘恢复 ${p.packageId} 失败", it) }
+        }
+        return ok
+    }
+
+    /**
      * v2.2.8: 从 files/quickapps 导入备份恢复用户包到数据盘（幂等）。
      * 供 DiskDoctor 修复与「数据盘迁移重部署」两条链路共用 —— 旧实现只有
      * DiskDoctor 会恢复，升级换资产的重部署把用户包静默清空（丢盘主诉之一）。
@@ -570,7 +624,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 安装已导入的 rpk 到数据盘；完成后自动刷新列表。写盘前自动停止运行中的虚拟机 */
     fun installRpkToVm(pkg: RpkManager.QuickAppPackage) {
-        if (_vmInstallState.value.busy) return
+        if (_vmInstallState.value.busy) {
+            // v2.2.10: busy 门禁拒绝时必须留痕（此前静默 return，用户点击无反馈且无日志可查）
+            FileLogger.w("rpk", "安装请求被忽略：另一数据盘操作进行中（stage=${_vmInstallState.value.stage}）")
+            return
+        }
         _vmInstallState.value = VmInstallUiState(busy = true, stage = "准备…")
         viewModelScope.launch(Dispatchers.IO) {
             prepareDiskExclusive()?.let {
@@ -653,7 +711,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * 会使 vapp 查找路径超过 48 字符命中固件 LFN 缺陷（详见 QuickAppIds）。
      */
     fun installRpkAndLaunch(t: DeviceTemplate, pkg: RpkManager.QuickAppPackage, onLaunched: () -> Unit) {
-        if (_vmInstallState.value.busy) return
+        if (_vmInstallState.value.busy) {
+            // v2.2.10: 同 installRpkToVm —— 门禁拒绝留痕，不再静默吞掉
+            FileLogger.w("rpk", "安装启动请求被忽略：另一数据盘操作进行中（stage=${_vmInstallState.value.stage}）")
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             _vmInstallState.value = VmInstallUiState(busy = true, stage = "准备…")
             installFileAndLaunch(t, File(pkg.filePath), onLaunched)
