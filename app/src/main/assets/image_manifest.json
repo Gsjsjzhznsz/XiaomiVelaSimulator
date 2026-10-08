@@ -6,15 +6,15 @@
     {
       "id": "vela-vapp-demo",
       "name": "Vela vApp 固件 (APK 内置 · 全机型统一)",
-      "desc": "v2.2.13 交付固件（v2.2.12 构建，sha c3751875…）：v2.2.11 全部能力（CJK 中文字体渲染 Sarasa Mono SC + FAT NT 小写短名兼容 + LVGL 弹性布局/rgba 颜色/包内图片解码 + 页面 VM 数据节合并）+ BandQQ 触摸事件→JS 全链路打通（virtio-input BTN_LEFT/BTN_TOUCH 双支持、ABS 坐标按 fb0 尺寸缩放、LVGL touchscreen 状态机补丁、渲染树事件节点 CLICKABLE 挂载与事件派发 JS）+ flex 交叉轴轨道对齐修复（空态/状态栏水平居中与实体机一致）。v2.2.12 曾因清单 sha 滞后未把本固件部署到升级用户设备（触摸/布局修复未生效），v2.2.13 起清单由 CI 自动校验，资产实际 sha 为最高权威。",
+      "desc": "v2.2.14 全机型统一固件：①布局对齐官方引擎 ground truth——未声明 flexDirection 的容器默认 ROW（更多胶囊/返回键顶部居中，与实体机一致）②absolute 定位补 right/bottom、padding/margin 全量映射 ③页面路由真实实现（点击“更多”进入设置页、返回键回主页，router.push/replace/back）④virtio-gpu 显示管线事件驱动修复：FBIO_UPDATE 脏矩形传输+刷新、scanout 随双缓冲绑定、资源相对坐标、D-cache clean——页面切换实时上屏（VNC 矩形流实证）。",
       "machine": "virt",
       "kernel": "nuttx.bin",
       "source": "OpenVela/NuttX + openrt (vapp runtime) · 内置于 APK assets/images",
       "files": [
         {
           "url": "asset://images/nuttx.bin",
-          "sha256": "c37518752ae35e557d02f60355f73a235e67279d15d17f4770027387c7887146",
-          "size": 3503680,
+          "sha256": "d680393a00263cd47f21c2e4fdd5e1a54cd534b9255f5fd7eb4929f8e268c508",
+          "size": 3511872,
           "out": "nuttx.bin"
         },
         {
