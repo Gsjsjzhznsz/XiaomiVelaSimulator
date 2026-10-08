@@ -385,11 +385,15 @@ class QemuSession(
                             "guest 图形就绪后自动切换）"
                     )
                     var gotFrame = false
+                    val round = rounds
                     runCatching {
                         client.frameLoop(
                             onFrame = { gotFrame = true },
                             onEnd = { reason ->
-                                if (reason != null) appendLog("[vnc] 画面流结束: $reason")
+                                // v2.2.15: 断流原因必留痕（真机 session-20261007-235815 实锤：
+                                // BandQQ 渲染完成后帧循环中途死于 "Socket closed"，旧逻辑
+                                // gotFrame=true 直接放弃 → 触摸+画面同时静默失效整个会话）
+                                appendLog("[vnc] 画面流断开: ${reason ?: "正常关闭"}")
                             },
                             onResize = { nw, nh ->
                                 appendLog("[vnc] guest 扫描输出就绪，画面尺寸 → ${nw}x${nh}")
@@ -401,10 +405,20 @@ class QemuSession(
                     }.onFailure { appendLog("[vnc] 画面流异常退出: ${it.message}") }
                     runCatching { client.close() }
                     if (vnc === client) vnc = null
-                    // 出过画面说明图形会话已建立；断开多为 guest 退出/会话停止，不再重连
-                    if (gotFrame || _state.value != State.RUNNING) return@launch
-                    appendLog("[vnc] guest 图形尚未就绪（scanout 竞争），2s 后重连")
-                    _bootPhase.value = "图形栈启动中，等待扫描输出…"
+                    if (_state.value != State.RUNNING) return@launch
+                    // v2.2.15: 会话存活期间一律自动重连（此前 gotFrame=true 即永久放弃，
+                    // 任何瞬时断流——低内存/套接字抖动/guest 图形栈卡顿——都会把会话
+                    // 打成“画面冻结+触摸失效”直到手动重启。重连成本仅一次 TCP+RFB
+                    // 握手，desktop-resize/scanout 状态由新连接自然恢复）
+                    appendLog("[vnc] 自动重连（第 $round 轮会话连接已断，2s 后建立新连接）")
+                    if (!gotFrame) {
+                        _bootPhase.value = "图形栈启动中，等待扫描输出…"
+                    } else {
+                        // 出过画面后的断流：UI 端立即恢复“可感知”的启动态文案，
+                        // 避免用户对冻结帧继续触摸而毫无反馈
+                        _bootPhase.value = "画面连接恢复中…"
+                        _scanoutReady.value = false
+                    }
                     delay(2000)
                 }
             }
@@ -447,6 +461,36 @@ class QemuSession(
     }
 
     fun sendLine(cmd: String) = console.sendLine(cmd)
+
+    // v2.2.15: 触摸上行诊断。真机 session-20261007-235815 的教训：帧循环死亡后
+    // vnc=null，RunScreen 的 session?.vnc?.sendTouch 变成静默空操作，触摸链路
+    // 死亡在会话日志里零痕迹，用户与开发者都无法区分「触摸没发出去」与「固件
+    // 没响应」。此门面统一记录：连接缺失 / 发出坐标，前 8 次逐条 + 之后每 80 次一次。
+    private var touchSentCount = 0L
+    private var touchDropCount = 0L
+
+    /** 触摸上行（fb 坐标）。会话日志可观测：触摸是否发出、发到哪个坐标 */
+    fun sendTouch(x: Int, y: Int, pressed: Boolean) {
+        val c = vnc
+        if (c == null) {
+            touchDropCount++
+            if (touchDropCount <= 3L || touchDropCount % 40L == 0L) {
+                appendLog(
+                    "[touch] VNC 未连接，触摸丢弃 ($x,$y) ${if (pressed) "按下" else "抬起"}" +
+                        "（自动重连中，累计丢弃 $touchDropCount 次）"
+                )
+            }
+            return
+        }
+        c.sendTouch(x, y, pressed)
+        touchSentCount++
+        if (touchSentCount <= 8L || touchSentCount % 80L == 0L) {
+            appendLog(
+                "[touch] → fb($x,$y) ${if (pressed) "down" else "up"}" +
+                    "（#${touchSentCount}）"
+            )
+        }
+    }
 
     fun release() {
         stop()

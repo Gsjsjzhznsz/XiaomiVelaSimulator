@@ -211,7 +211,8 @@ fun RunScreen(vm: MainViewModel, id: String, onBack: () -> Unit, modifier: Modif
                         VncDisplayView(
                             vncFrame?.second, t, Modifier.fillMaxSize(),
                             onTouch = { x, y, pressed ->
-                                session?.vnc?.sendTouch(x, y, pressed)
+                                // v2.2.15: 经 QemuSession 门面（连接缺失时日志留痕，不再静默）
+                                session?.sendTouch(x, y, pressed)
                             },
                         )
                         if (showBootOverlay) {

@@ -42,6 +42,12 @@ class RfbClient {
     /** 写锁: 帧循环请求与输入事件共用一条输出流，必须串行化 */
     private val writeLock = Any()
 
+    /** v2.2.15: close() 调用留痕 —— 定位「会话中期 socket 被谁关闭」。真机
+     *  session-20261007-235815 实锤过一次帧循环中途死于 Socket closed 且会话
+     *  未停止，旧代码无法回答「谁关的」。首次 close() 记录调用链短签名，
+     *  帧循环若随后因此断流，endReason 会携带该签名（正常 teardown 亦无害）。 */
+    private var closeTrace: String? = null
+
     var framebuffer: Bitmap? = null
         private set
 
@@ -309,7 +315,15 @@ class RfbClient {
             }
         } catch (e: Exception) {
             // 连接关闭/对端断开/中途异常：上报原因供调用方写会话日志
-            endReason = e.message ?: e.javaClass.simpleName
+            // v2.2.15: 原因分类 —— EOF=服务器关闭；Socket closed 且有本地 close()
+            // 留痕时携带调用链，把「谁关的」写进会话日志
+            endReason = when {
+                e is java.io.EOFException -> "服务器关闭连接（EOF）"
+                else -> e.message ?: e.javaClass.simpleName
+            }
+            if (endReason?.contains("closed", ignoreCase = true) == true && closeTrace != null) {
+                endReason += "（本地 close() 来自: $closeTrace）"
+            }
         } finally {
             running.set(false)
             try { onEnd?.invoke(endReason) } catch (_: Exception) {}
@@ -382,6 +396,11 @@ class RfbClient {
     }
 
     fun close() {
+        if (closeTrace == null) {
+            closeTrace = Throwable().stackTrace
+                .drop(1).take(3)
+                .joinToString("<-") { "${it.className.substringAfterLast('.')}.${it.methodName}" }
+        }
         running.set(false)
         runCatching { socket?.close() }
         socket = null

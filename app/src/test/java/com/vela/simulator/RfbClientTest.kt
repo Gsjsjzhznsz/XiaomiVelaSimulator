@@ -11,6 +11,8 @@ import java.io.InputStream
 import java.net.ServerSocket
 import java.net.Socket
 import kotlin.concurrent.thread
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * RFB 客户端协议回归测试（v0.3.2）：
@@ -247,6 +249,71 @@ class RfbClientTest {
         assertEquals("位图必须跟随 guest 扫描输出尺寸（真机右侧黑条根因）", 432, fb!!.width)
         assertEquals(514, fb.height)
         assertTrue(client.frameHasContent)
+        client.close()
+        t.join(3000)
+        server.close()
+    }
+
+    @Test
+    fun `frameLoop reports local close trace in end reason`() {
+        // v2.2.15 回归：真机 session-20261007-235815 实锤帧循环会话中期死于
+        // "Socket closed" 且无人认领。close() 现在留调用链短签名，断流原因必须
+        // 携带该签名（QemuSession 会把它写进会话日志，下次一眼看到凶手）。
+        var reason: String? = null
+        val (server, t) = serve { c ->
+            serverHandshake(c)
+            Thread.sleep(1500) // 保持连接，客户端阻塞在帧循环读上
+            c.close()
+        }
+        val client = RfbClient()
+        assertTrue(client.connect(server.localPort, 100, 100))
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeout(8000) {
+                // 关键：frameLoop 是阻塞读，必须放 Dispatchers.IO 真实线程 ——
+                // runBlocking 事件循环线程被阻塞读卡死后，delay(300)/close()
+                // 永远得不到执行（本用例首跑教训：读到的是服务端 1.5s 后的 EOF）
+                val job = launch(kotlinx.coroutines.Dispatchers.IO) {
+                    client.frameLoop(onEnd = { reason = it })
+                }
+                delay(300)
+                // 模拟「会话中期本地关闭」：非 stop() 路径直接 close
+                client.close()
+                job.join()
+            }
+        }
+        assertTrue(
+            "断流原因必须携带本地 close() 调用链签名，实际: $reason",
+            (reason ?: "").contains("本地 close() 来自"),
+        )
+        t.join(3000)
+        server.close()
+    }
+
+    @Test
+    fun `frameLoop classifies server EOF`() {
+        // v2.2.15 回归：服务器侧关闭（QEMU 退出/崩溃）读到 EOF 时，原因应明确
+        // 归类为「服务器关闭连接」而不是裸 "EOFException" 类名。
+        var reason: String? = null
+        val (server, t) = serve { c ->
+            val ins = serverHandshake(c)
+            // 关键：先读净客户端上行（SetPixelFormat 20B + SetEncodings 12B + FBU 10B）
+            // 再关 —— 否则对端带着未消费数据关闭会发 RST，客户端收到的是
+            // Connection reset 而非 EOF，用例意图落空
+            val drain = ByteArray(42); readFully(ins, drain)
+            Thread.sleep(400)
+            c.close() // 对端优雅关闭 → 客户端 EOF
+        }
+        val client = RfbClient()
+        assertTrue(client.connect(server.localPort, 100, 100))
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeout(8000) {
+                client.frameLoop(onEnd = { reason = it })
+            }
+        }
+        assertTrue(
+            "EOF 应归类为服务器关闭连接，实际: $reason",
+            (reason ?: "").contains("服务器关闭连接"),
+        )
         client.close()
         t.join(3000)
         server.close()
