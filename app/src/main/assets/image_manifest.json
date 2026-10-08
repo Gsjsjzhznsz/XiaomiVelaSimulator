@@ -6,14 +6,14 @@
     {
       "id": "vela-vapp-demo",
       "name": "Vela vApp 固件 (APK 内置 · 全机型统一)",
-      "desc": "v2.2.15 全机型统一固件（内核与 v2.2.14 相同 d680393a）：APK 端触摸/画面链路加固——①VNC 画面流断开后自动重连（真机日志实锤：帧循环会话中期死亡后旧版永久放弃，触摸+画面同时静默失效）②触摸上行全程可观测（每次落点进会话日志，连接缺失不再静默丢弃）③断流原因分类与本地 close 调用链留痕，日志可定位凶手。固件侧能力同 v2.2.14：布局 ROW 语义对齐官方引擎、页面路由真实实现、virtio-gpu 显示管线事件驱动修复。",
+      "desc": "v2.2.15 全机型统一固件：①APK 触摸/画面链路加固——VNC 画面流断开自动重连、触摸上行全程可观测（[touch] 日志）②固件三层触诊日志（[vin] 内核 virtqueue → [indev] LVGL 按压 → [vapp] ev dispatch JS 分发），触摸链任何一环丢失都能从会话日志定位 ③布局 ROW 语义对齐官方引擎、页面路由、virtio-gpu 显示管线修复（v2.2.14 能力全保留）。",
       "machine": "virt",
       "kernel": "nuttx.bin",
       "source": "OpenVela/NuttX + openrt (vapp runtime) · 内置于 APK assets/images",
       "files": [
         {
           "url": "asset://images/nuttx.bin",
-          "sha256": "d680393a00263cd47f21c2e4fdd5e1a54cd534b9255f5fd7eb4929f8e268c508",
+          "sha256": "be35154fc3ac0f94c01a4ba114f096b83b421025dc4a7dac1953513f1d56875a",
           "size": 3511872,
           "out": "nuttx.bin"
         },
