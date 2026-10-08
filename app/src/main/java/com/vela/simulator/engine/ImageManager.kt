@@ -98,6 +98,31 @@ class ImageManager(private val context: Context) {
 
     val imagesDir: File get() = File(context.filesDir, "images").apply { mkdirs() }
 
+    /**
+     * v2.2.13: 计算 APK 内置资产的实际 SHA256（AssetManager 流式哈希，失败返回 null）。
+     * 清单是人手维护的元数据，v2.2.12 真机事故实锤「清单滞后」是常态风险：
+     * 发布换了新固件资产但清单 sha 未同步 → 部署文件（旧固件）sha == 清单 sha →
+     * 误判「一致」→ 新固件永不落盘，用户设备长期停留在旧固件上，
+     * 触摸/布局修复全部未生效且从会话日志完全无法察觉。
+     * 故 asset:// 条目一律以 APK 资产本身为最高权威，清单 sha 仅作回退参考。 */
+    private fun assetSha256(assetPath: String): String? = runCatching {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        context.assets.open(assetPath).use { ins ->
+            val buf = ByteArray(128 * 1024)
+            while (true) {
+                val n = ins.read(buf)
+                if (n < 0) break
+                if (n > 0) md.update(buf, 0, n)
+            }
+        }
+        md.digest().joinToString("") { "%02x".format(it) }
+    }.getOrNull()
+
+    /** v2.2.13: asset:// 条目的比对基准 —— 资产实际 sha 优先，哈希失败回退清单 sha */
+    private fun authoritativeSha(url: String, manifestSha: String): String =
+        if (url.startsWith("asset://")) assetSha256(url.removePrefix("asset://")) ?: manifestSha
+        else manifestSha
+
     @Serializable
     data class ImageFile(val url: String, val sha256: String = "", val size: Long = 0, val out: String, val stateful: Boolean = false)
 
@@ -199,7 +224,9 @@ class ImageManager(private val context: Context) {
      *  再抹一次的连锁丢盘；rename 在 POSIX 语义下要么全旧要么全新，无中间态。 */
     private fun copyFromAssets(assetPath: String, dest: File, label: String, expectSha256: String = "") {
         if (dest.isFile && dest.length() > 0) {
-            val stale = expectSha256.isNotEmpty() && !verifyKernel(label, expectSha256)
+            // v2.2.13: 比对基准改为资产实际 sha（清单滞后不再让旧文件误判「已就绪」跳过重拷）
+            val expected = authoritativeSha("asset://$assetPath", expectSha256)
+            val stale = expected.isNotEmpty() && !verifyKernel(label, expected)
             if (!stale) {
                 progress?.onStage("内置镜像已就绪 $label")
                 return
@@ -302,8 +329,16 @@ class ImageManager(private val context: Context) {
             }
             val missing = !dest.isFile || dest.length() <= 0
             if (isStatefulImage(f.out, f.stateful)) {
-                val manifestSha = f.sha256
+                var manifestSha = f.sha256
                 val markerContent = if (marker.isFile) runCatching { marker.readText().trim() }.getOrNull() else null
+                // v2.2.13: 标记与清单不一致时，先核对 APK 资产实际 sha——一致则
+                // 视为「清单滞后但资产未变」，KEEP（避免无谓抹盘迁移）；仍不一致
+                // 才走一次性迁移（真正换了出厂数据盘资产）。64MB 哈希只在
+                // 标记≠清单的分支执行，常规启动零额外开销。
+                if (markerContent != null && manifestSha.isNotEmpty() &&
+                    !markerContent.equals(manifestSha, ignoreCase = true)) {
+                    manifestSha = authoritativeSha(f.url, manifestSha)
+                }
                 when (decideStatefulDeploy(!missing, markerContent, manifestSha, forceRedeploy)) {
                     DeployDecision.DEPLOY -> {
                         val replacing = dest.isFile
@@ -344,7 +379,24 @@ class ImageManager(private val context: Context) {
                     allOk = allOk && dest.isFile
                     continue
                 }
-                if (f.sha256.isNotEmpty()) {
+                if (f.url.startsWith("asset://")) {
+                    // v2.2.13: 内置只读内核以 APK 资产实际 sha 为最高权威（清单滞后
+                    // 不再阻断固件交付）。v2.2.12 真机事故：清单 sha 滞留旧固件值，
+                    // 部署文件 sha 碰巧与之相等 → 误判「一致」→ 新固件永不部署，
+                    // 用户的触摸/布局修复长期未生效。成本：每次会话启动多一次
+                    // ~3.5MB 哈希（几十毫秒），清单正确时行为与旧逻辑完全一致。
+                    val expected = authoritativeSha(f.url, f.sha256)
+                    if (expected.isNotEmpty()) {
+                        val actual = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
+                        if (!actual.equals(expected, ignoreCase = true)) {
+                            // 内核版本更新/损坏 → 原子重拷（rename 覆盖，无中间态）
+                            progress?.onStage("内核镜像版本更新，重新部署 ${f.out}")
+                            atomicCopyAsset(f.url.removePrefix("asset://"), dest, f.out)
+                            val after = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
+                            if (!after.equals(expected, ignoreCase = true)) allOk = false
+                        }
+                    }
+                } else if (f.sha256.isNotEmpty()) {
                     val actual = runCatching { QemuRuntime(context).sha256(dest) }.getOrDefault("")
                     if (!actual.equals(f.sha256, ignoreCase = true)) {
                         // 只读内核损坏 → 原子重拷（rename 覆盖，无中间态）

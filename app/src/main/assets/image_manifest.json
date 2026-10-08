@@ -1,20 +1,20 @@
 {
   "version": 2,
-  "updated": "2026-10-07",
+  "updated": "2026-10-08",
   "baseRepo": "https://github.com/Gsjsjzhznsz/XiaomiVelaSimulator",
   "images": [
     {
       "id": "vela-vapp-demo",
       "name": "Vela vApp 固件 (APK 内置 · 全机型统一)",
-      "desc": "v2.2.11 全机型统一固件：CJK 中文字体渲染（Sarasa Mono SC 16/24/32px，真实包中文文本不再空白）+ FAT NT 小写短名兼容（mtools/Windows 风格盘）+ LVGL 弹性布局/rgba 颜色/包内图片解码接入（LV_USE_FS_POSIX）+ 页面 VM 数据节合并（private/protected/public → 模板取值生效）。真实 BandQQ 包现可渲染空态界面（图标/按钮/中文提示/连接状态）。",
+      "desc": "v2.2.13 交付固件（v2.2.12 构建，sha c3751875…）：v2.2.11 全部能力（CJK 中文字体渲染 Sarasa Mono SC + FAT NT 小写短名兼容 + LVGL 弹性布局/rgba 颜色/包内图片解码 + 页面 VM 数据节合并）+ BandQQ 触摸事件→JS 全链路打通（virtio-input BTN_LEFT/BTN_TOUCH 双支持、ABS 坐标按 fb0 尺寸缩放、LVGL touchscreen 状态机补丁、渲染树事件节点 CLICKABLE 挂载与事件派发 JS）+ flex 交叉轴轨道对齐修复（空态/状态栏水平居中与实体机一致）。v2.2.12 曾因清单 sha 滞后未把本固件部署到升级用户设备（触摸/布局修复未生效），v2.2.13 起清单由 CI 自动校验，资产实际 sha 为最高权威。",
       "machine": "virt",
       "kernel": "nuttx.bin",
       "source": "OpenVela/NuttX + openrt (vapp runtime) · 内置于 APK assets/images",
       "files": [
         {
           "url": "asset://images/nuttx.bin",
-          "sha256": "c839ae6b019954476f5478746818032a88c0896f4615adf7d066d95be6475026",
-          "size": 3487280,
+          "sha256": "c37518752ae35e557d02f60355f73a235e67279d15d17f4770027387c7887146",
+          "size": 3503680,
           "out": "nuttx.bin"
         },
         {

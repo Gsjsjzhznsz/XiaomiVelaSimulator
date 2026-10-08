@@ -22,6 +22,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # v2.2.13: 发布前清单校验 —— 重算内置资产 sha256/size 与 image_manifest.json
+      # 逐项比对。v2.2.12 事故（清单 sha 滞留旧固件 → 新固件永不部署到用户设备，
+      # 触摸/布局修复未生效）必须在流水线上拦截，而不是到用户手机上才暴露。
+      - name: Verify image manifest matches assets
+        run: python3 scripts/ci/verify_manifest.py
       - name: Enable gradle wrapper
         run: chmod +x gradlew
       - name: Build debug APK

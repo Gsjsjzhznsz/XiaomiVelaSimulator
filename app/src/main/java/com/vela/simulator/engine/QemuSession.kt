@@ -226,6 +226,15 @@ class QemuSession(
             return
         }
 
+        // v2.2.13: 固件身份指纹进会话日志。v2.2.12 真机事故（清单 sha 滞后 → 用户
+        // 设备长期停留旧固件，触摸/布局修复未生效且从日志完全无法察觉）的根治
+        // 配套：每次会话记录实际运行的内核 sha 前 16 位，现场诊断「跑的到底是
+        // 哪版固件」不再靠猜 —— 指纹与 Release notes 内置固件 sha 比对即可。
+        runCatching {
+            val sha = runtime.sha256(kernel)
+            appendLog("[vela] 固件指纹 ${kernel.name} ${kernel.length()}B sha256=${sha.take(16)}")
+        }.onFailure { FileLogger.w("session", "固件指纹计算失败（忽略）: ${it.message}") }
+
         val plan: QemuArgsBuilder.Plan? = withContext(Dispatchers.IO) {
             runCatching {
                 QemuArgsBuilder.build(template, imagesDir, runtime.prefixUsr, runtime.qemuBinary)
