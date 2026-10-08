@@ -1,0 +1,75 @@
+===== 会话: REDMI Watch 5 eSIM =====
+[vela] 固件指纹 nuttx.bin 3511872B sha256=d680393a00263cd4
+[qemu-cmd] /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0,snapshot=on -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:38221,server -vnc 127.0.0.1:35789 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+[qemu] qemu-system-arm: -serial tcp:127.0.0.1:38221,server: info: QEMU waiting for connection on: disconnected:tcp:127.0.0.1:38221,server=on
+[serial] 已连接串口 tcp:38221
+[vnc] 连接尝试 #1 失败: failed to connect to /127.0.0.1 (port 41689) from /127.0.0.1 (port 53760) after 2000ms: isConnected failed: ECONNREFUSED (Connection refused)（持续重试中，等待 QEMU VNC 端口就绪）
+[vnc] 已连接 127.0.0.1:41689（第 1 轮，经 2 次尝试）
+[vnc] 服务器初始尺寸 640x480（模板期望 432x514，guest 图形就绪后自动切换）
+nx_start: Entry
+uart_register: Registering /dev/console
+uart_register: Registering /dev/ttyS1
+work_start_highpri: Starting high-priority kernel worker thread(s)
+nxtask_activate: hpwork pid=1,TCB=0x4021d628
+lib_cxx_initialize: _sinit: 0x73401c _einit: 0x73401c
+nx_start_application: Starting init thread
+task_spawn: name=nsh_main entry=0x6165f0 file_actions=0 attr=0x4021cfac argv=0x4021cfa8
+nxtask_activate: nsh_main pid=2,TCB=0x4021d710
+[vnc] guest 扫描输出就绪，画面尺寸 → 432x514
+nx_start: CPU0: Beginning Idle Loop
+NuttShell (NSH)
+[vela] 检测到 NSH，自动执行 2 条命令
+nsh> [K
+[vela] 自动命令: mount -t vfat /dev/virtblk0 /data
+mount -t vfat /dev/virtblk0 /data
+nxposix_spawn_exec: ERROR: exec failed: 2
+nsh> [K
+[vela] 自动命令: vapp hap://app/qa71f2ba2c1b
+nsh> [Kvapp hap://app/qa71f2ba2c1b
+nxtask_activate: vapp pid=3,TCB=0x4022a8b8
+[vapp] open runtime starting for qa71f2ba2c1b
+[vapp] using unpacked package at /data/vapps/qa71f2ba2c1b/
+[vapp] entry page: pages/index (/data/vapps/qa71f2ba2c1b/pages/index/index.js)
+pthread_mutex_init: mutex=0x404197d0 attr=0x4040d4d4
+pthread_mutex_timedlock: mutex=0x40200544
+pthread_mutex_timedlock: Returning 0
+pthread_mutex_unlock: mutex=0x40200544
+pthread_mutex_unlock: Returning 0
+pthread_mutex_timedlock: mutex=0x40419d60
+pthread_mutex_timedlock: Returning 0
+pthread_mutex_unlock: mutex=0x40419d60
+pthread_mutex_unlock: Returning 0
+pthread_cond_init: cond=0x4040d988 attr=0
+pthread_cond_init: Returning 0
+pthread_mutex_init: mutex=0x4040d96c attr=0
+pthread_mutex_init: mutex=0x4040d90c attr=0x4040d4d4
+[vhost] init v2.2.14-marker
+[BANDQQ] v21 app onCreate, protocol= object store= object api= object direct= object
+[BANDQQ] v21 index onShow
+[vapp] tree[1583 bytes] values:yes
+[vrender] img /data/vapps/qa71f2ba2c1b/common/ui/more.png -> open OK
+[vrender] decinfo A:/data/vapps/qa71f2ba2c1b/common/ui/more.png -> res=1 w=102 h=72
+[vrender] ev attach e0
+[vrender] img /data/vapps/qa71f2ba2c1b/common/ui/empty_icon.png -> open OK
+[vrender] decinfo A:/data/vapps/qa71f2ba2c1b/common/ui/empty_icon.png -> res=1 w=100 h=100
+[vapp] rendered 9 widget(s)
+[vrender] node div cls="page" obj=0x4020d24c x=0 y=0 w=432 h=514
+[vrender] node div cls="top-row" obj=0x4020d314 x=0 y=0 w=432 h=94
+[vrender] node image cls="btn" obj=0x4020d3e8 x=155 y=7 w=122 h=86
+[vrender] node div cls="list-wrap" obj=0x4020d5a0 x=0 y=94 w=432 h=348
+[vrender] node scroll cls="list" obj=0x4020d610 x=0 y=94 w=432 h=348
+[vrender] node div cls="empty-wrap" obj=0x4020d6ec x=0 y=94 w=432 h=348
+[vrender] node image cls="empty-icon" obj=0x4020d77c x=169 y=200 w=94 h=94
+[vrender] node text cls="empty-text" obj=0x4020d8a4 x=96 y=308 w=240 h=27
+[vrender] node div cls="status-bar" obj=0x4020d9b8 x=0 y=442 w=432 h=72
+[vrender] node text cls="status-text" obj=0x4020da3c x=180 y=464 w=72 h=27
+init connect error TypeError: cannot read property 'instance' of null
+[BANDQQ] v9 api.send throw TypeError: cannot read property 'instance' of null
+[BANDQQ] v9 api.send throw TypeError: cannot read property 'instance' of null
+pull connect state failed TypeError: cannot read property 'instance' of null
+pull visible contacts failed TypeError: cannot read property 'instance' of null
+[index] applyConversations -> 0 conv
+[BANDQQ] v9 api.send throw TypeError: cannot read property 'instance' of null
+[vnc] 画面流结束: Socket closed
+[qemu] 输出流结束: read interrupted by close() on another thread
+[vela] QEMU 已退出（代码 0）
