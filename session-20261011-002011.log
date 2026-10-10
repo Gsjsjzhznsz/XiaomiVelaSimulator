@@ -1,0 +1,87 @@
+===== 会话: REDMI Watch 5 eSIM =====
+[vela] 固件指纹 nuttx.bin 3511872B sha256=be35154fc3ac0f94
+[qemu-cmd] /data/user/0/com.vela.simulator/files/qemu-prefix/usr/bin/qemu-system-arm -M virt -cpu cortex-a7 -smp 1 -m 512M -device virtio-gpu-device,xres=432,yres=514 -device virtio-tablet-device -nic none -device loader,file=/data/user/0/com.vela.simulator/files/images/nuttx.bin,addr=0x600000 -device loader,addr=0x006002e0,cpu-num=0 -drive file=/data/user/0/com.vela.simulator/files/images/data.img,if=none,format=raw,id=hd0,snapshot=on -device virtio-blk-device,drive=hd0 -display none -monitor none -serial tcp:127.0.0.1:40259,server -vnc 127.0.0.1:38547 -L /data/user/0/com.vela.simulator/files/qemu-prefix/usr/share/qemu
+[qemu] qemu-system-arm: -serial tcp:127.0.0.1:40259,server: info: QEMU waiting for connection on: disconnected:tcp:127.0.0.1:40259,server=on
+[serial] 已连接串口 tcp:40259
+[vnc] 连接尝试 #1 失败: failed to connect to /127.0.0.1 (port 44447) from /127.0.0.1 (port 43128) after 2000ms: isConnected failed: ECONNREFUSED (Connection refused)（持续重试中，等待 QEMU VNC 端口就绪）
+[vnc] 已连接 127.0.0.1:44447（第 1 轮，经 2 次尝试）
+[vnc] 服务器初始尺寸 640x480（模板期望 432x514，guest 图形就绪后自动切换）
+nx_start: Entry
+uart_register: Registering /dev/console
+uart_register: Registering /dev/ttyS1
+work_start_highpri: Starting high-priority kernel worker thread(s)
+nxtask_activate: hpwork pid=1,TCB=0x4021d628
+lib_cxx_initialize: _sinit: 0x7340d4 _einit: 0x7340d4
+nx_start_application: Starting init thread
+task_spawn: name=nsh_main entry=0x616628 file_actions=0 attr=0x4021cfac argv=0x4021cfa8
+nxtask_activate: nsh_main pid=2,TCB=0x4021d710
+[vnc] guest 扫描输出就绪，画面尺寸 → 432x514
+NuttShell (NSH)
+[vela] 检测到 NSH，自动执行 2 条命令
+nsh> [Knx_start: CPU0: Beginning Idle Loop
+[vela] 自动命令: mount -t vfat /dev/virtblk0 /data
+mount -t vfat /dev/virtblk0 /data
+nxposix_spawn_exec: ERROR: exec failed: 2
+nsh> [K
+[vela] 自动命令: vapp hap://app/qa1ee83b7c6d
+nsh> [Kvapp hap://app/qa1ee83b7c6d
+nxtask_activate: vapp pid=3,TCB=0x4022a8b8
+[vapp] open runtime starting for qa1ee83b7c6d
+[vapp] using unpacked package at /data/vapps/qa1ee83b7c6d/
+[vapp] entry page: pages/home (/data/vapps/qa1ee83b7c6d/pages/home/home.js)
+pthread_mutex_init: mutex=0x4041a490 attr=0x4040d4d4
+pthread_mutex_timedlock: mutex=0x40200544
+pthread_mutex_timedlock: Returning 0
+pthread_mutex_unlock: mutex=0x40200544
+pthread_mutex_unlock: Returning 0
+pthread_mutex_timedlock: mutex=0x4041aa20
+pthread_mutex_timedlock: Returning 0
+pthread_mutex_unlock: mutex=0x4041aa20
+pthread_mutex_unlock: Returning 0
+pthread_cond_init: cond=0x4040d988 attr=0
+pthread_cond_init: Returning 0
+pthread_mutex_init: mutex=0x4040d96c attr=0
+pthread_mutex_init: mutex=0x4040d90c attr=0x4040d4d4
+[vhost] init v2.2.15-marker
+[GH] app created
+[vapp] tree[8300 bytes] values:yes
+[vrender] img /data/vapps/qa1ee83b7c6d/common/icons/logo.png -> open OK
+[vrender] decinfo A:/data/vapps/qa1ee83b7c6d/common/icons/logo.png -> res=1 w=192 h=192
+[vrender] ev attach e0
+[vrender] img /data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> open OK
+[vrender] decinfo A:/data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> res=1 w=96 h=96
+[vrender] ev attach e1
+[vrender] img /data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> open OK
+[vrender] decinfo A:/data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> res=1 w=96 h=96
+[vrender] ev attach e2
+[vrender] img /data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> open OK
+[vrender] decinfo A:/data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> res=1 w=96 h=96
+[vrender] ev attach e3
+[vrender] img /data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> open OK
+[vrender] decinfo A:/data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> res=1 w=96 h=96
+[vrender] ev attach e4
+[vrender] img /data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> open OK
+[vrender] decinfo A:/data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> res=1 w=96 h=96
+[vrender] ev attach e5
+[vrender] img /data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> open OK
+[vrender] decinfo A:/data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> res=1 w=96 h=96
+[vrender] ev attach e6
+[vrender] img /data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> open OK
+[vrender] decinfo A:/data/vapps/qa1ee83b7c6d/common/icons/chevron.png -> res=1 w=96 h=96
+[vapp] rendered 57 widget(s)
+Dump all used memory node info
+        Size Overhead    Address 
+dump_assert_info: Current Version: NuttX  0.0.0 dd92bcf4-dirty Oct  8 2026 15:58:48 arm
+dump_assert_info: Assertion failed : at file: /home/z/ov/nuttx/include/nuttx/semaphore.h:523 task: vapp process: vapp 0x644de8
+up_dump_register: R0: 40201b20 R1: 0000020b R2: 00000000  R3: 40201130
+up_dump_register: R4: 00000000 R5: 00735498 R6: 4022a8b8  R7: 40201b20
+up_dump_register: R8: 402010c1 R9: 00000000 R10: 00000006 R11: 0000020b
+up_dump_register: R12: 00000090 SP: 40200d38 LR: 006011f8  PC: 006011f8
+up_dump_register: CPSR: 200000df
+nxsig_tcbdispatch: TCB=0x4022a8b8 pid=3 signo=6 code=0 value=0 masked=NO
+nxsig_tcbdispatch: TCB=0x4022a8b8 pid=3 signo=6 code=0 value=0 masked=NO
+nxtask_exit: vapp pid=3,TCB=0x4022a8b8
+nsh> [K
+[vnc] 画面流断开: Socket closed（本地 close() 来自: QemuSession.stop<-MainViewModel.stopSession<-RunScreenKt.RunScreen$lambda$21$0$2$0）
+[qemu] 输出流结束: read interrupted by close() on another thread
+[vela] QEMU 已退出（代码 0）
